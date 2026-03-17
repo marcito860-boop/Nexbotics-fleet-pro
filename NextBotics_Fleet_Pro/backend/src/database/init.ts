@@ -814,7 +814,7 @@ CREATE TRIGGER update_slides_updated_at
 
 CREATE TABLE IF NOT EXISTS audit_templates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     category VARCHAR(100) NOT NULL,
@@ -822,7 +822,8 @@ CREATE TABLE IF NOT EXISTS audit_templates (
     is_active BOOLEAN DEFAULT true,
     created_by UUID REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_template_name_per_company UNIQUE (company_id, name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_templates_company ON audit_templates(company_id);
@@ -830,7 +831,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_templates_active ON audit_templates(company
 
 CREATE TABLE IF NOT EXISTS audit_questions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
     template_id UUID NOT NULL REFERENCES audit_templates(id) ON DELETE CASCADE,
     question_number INTEGER NOT NULL,
     question_text TEXT NOT NULL,
