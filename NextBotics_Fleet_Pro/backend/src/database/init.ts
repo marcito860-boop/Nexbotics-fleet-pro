@@ -961,31 +961,6 @@ INSERT INTO audit_templates (company_id, name, description, category, is_system_
 (NULL, 'Regulatory Compliance', 'Comprehensive review of regulatory compliance status', 'compliance', true, true)
 ON CONFLICT DO NOTHING;
 
--- Insert sample questions for Vehicle Maintenance Audit template
-DO $$
-DECLARE
-    template_id UUID;
-BEGIN
-    SELECT id INTO template_id FROM audit_templates WHERE name = 'Vehicle Maintenance Audit' AND is_system_template = true LIMIT 1;
-    
-    IF template_id IS NOT NULL THEN
-        INSERT INTO audit_questions (company_id, template_id, question_number, question_text, description, category, weight, evidence_required)
-        SELECT NULL, template_id, * FROM (VALUES
-            (1, 'Are preventive maintenance schedules established and documented?', 'Check for documented maintenance schedules for all vehicles', 'documentation', 1, true),
-            (2, 'Are maintenance records maintained for each vehicle?', 'Verify that service history is recorded and accessible', 'documentation', 1, true),
-            (3, 'Is there a system for tracking vehicle mileage?', 'Check if odometer readings are regularly recorded', 'tracking', 1, false),
-            (4, 'Are drivers trained to perform pre-trip inspections?', 'Verify driver training records for pre-trip checks', 'training', 1, true),
-            (5, 'Is there a written maintenance policy?', 'Check for formal maintenance procedures document', 'documentation', 1, true),
-            (6, 'Are service intervals based on manufacturer recommendations?', 'Verify maintenance intervals align with OEM specs', 'procedures', 1, false),
-            (7, 'Is there a process for handling breakdowns?', 'Check for emergency repair procedures', 'procedures', 1, false),
-            (8, 'Are maintenance costs tracked and analyzed?', 'Verify cost tracking system exists', 'financial', 1, true),
-            (9, 'Is vehicle downtime minimized through planning?', 'Assess if scheduled maintenance reduces unplanned downtime', 'planning', 1, false),
-            (10, 'Are spare parts inventory levels adequate?', 'Check spare parts availability for common repairs', 'inventory', 1, false)
-        ) AS t(qnum, qtext, desc, cat, w, ev)
-        ON CONFLICT (template_id, question_number) DO NOTHING;
-    END IF;
-END $$;
-
 -- ============================================
 -- STAGE 6: RISK TRACKER (Corrective Actions Enhancement)
 -- ============================================
