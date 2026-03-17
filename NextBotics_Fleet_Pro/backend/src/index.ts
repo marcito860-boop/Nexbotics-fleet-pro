@@ -44,15 +44,19 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? [
+      process.env.FRONTEND_URL,
+      'https://nexbotics-fleet-pro.vercel.app',
+      'https://nexbotics-fleet-pro-git-master-marcito860-boops-projects.vercel.app'
+    ].filter((url): url is string => !!url)
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.FRONTEND_URL, 'https://nexbotics-fleet-pro.vercel.app', 'https://nexbotics-fleet-pro-git-master-marcito860-boops-projects.vercel.app'].filter(Boolean)
-    : ['http://localhost:5173', 'http://localhost:3000'],
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-  credentials: true
 }));
 
 // Body parsing
