@@ -98,6 +98,22 @@ app.use('/api/fleet/suppliers', supplierRoutes);
 app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
 
+// Temporary diagnostic endpoint
+import { SuperAdminModel } from './models/SuperAdmin';
+app.get('/api/debug/superadmin', async (req, res) => {
+  try {
+    const superAdmin = await SuperAdminModel.findByEmail('superadmin@nextbotics.com');
+    res.json({
+      exists: !!superAdmin,
+      email: superAdmin?.email,
+      firstName: superAdmin?.firstName,
+      isActive: superAdmin?.isActive
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Debug failed' });
+  }
+});
+
 // GraphQL endpoint
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 app.use('/graphql', authMiddleware, createHandler({
