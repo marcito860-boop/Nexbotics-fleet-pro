@@ -46,8 +46,12 @@ app.use(helmet());
 // CORS configuration
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
+    ? [process.env.FRONTEND_URL, 'https://nexbotics-fleet-pro.vercel.app', 'https://nexbotics-fleet-pro-git-master-marcito860-boops-projects.vercel.app'].filter(Boolean)
     : ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
   credentials: true
 }));
 
