@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
+  PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 
-interface FuelPageProps {
-  apiUrl: string;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface FuelRecord {
   id: string;
@@ -65,13 +63,13 @@ interface CostAnalytics {
 
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899'];
 
-export default function FuelPage({ apiUrl }: FuelPageProps) {
+export default function FuelPage() {
   const [activeTab, setActiveTab] = useState<'transactions' | 'cards' | 'efficiency' | 'analytics'>('transactions');
   const [records, setRecords] = useState<FuelRecord[]>([]);
   const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [efficiencyData, setEfficiencyData] = useState<EfficiencyData[]>([]);
-  const [costAnalytics, setCostAnalytics] = useState<CostAnalytics[]>([]);
+  const [_costAnalytics, setCostAnalytics] = useState<CostAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -114,7 +112,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
     if (token) {
       fetchAllData();
     }
-  }, [apiUrl, token]);
+  }, [API_BASE_URL, token]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -135,7 +133,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   };
 
   const fetchRecords = async () => {
-    const res = await fetch(`${apiUrl}/fuel`, {
+    const res = await fetch(`${API_BASE_URL}/fuel`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch fuel records');
@@ -144,7 +142,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   };
 
   const fetchFuelCards = async () => {
-    const res = await fetch(`${apiUrl}/fuel/cards`, {
+    const res = await fetch(`${API_BASE_URL}/fuel/cards`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -157,7 +155,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   };
 
   const fetchVehicles = async () => {
-    const res = await fetch(`${apiUrl}/vehicles`, {
+    const res = await fetch(`${API_BASE_URL}/vehicles`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch vehicles');
@@ -166,7 +164,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   };
 
   const fetchEfficiencyData = async () => {
-    const res = await fetch(`${apiUrl}/fuel/efficiency`, {
+    const res = await fetch(`${API_BASE_URL}/fuel/efficiency`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -178,7 +176,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   };
 
   const fetchCostAnalytics = async () => {
-    const res = await fetch(`${apiUrl}/fuel/analytics?start=${dateRange.start}&end=${dateRange.end}`, {
+    const res = await fetch(`${API_BASE_URL}/fuel/analytics?start=${dateRange.start}&end=${dateRange.end}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -201,7 +199,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   const submitTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${apiUrl}/fuel`, {
+      const res = await fetch(`${API_BASE_URL}/fuel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -243,7 +241,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   const submitCard = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${apiUrl}/fuel/cards`, {
+      const res = await fetch(`${API_BASE_URL}/fuel/cards`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -270,7 +268,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
   const toggleCardStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
     try {
-      const res = await fetch(`${apiUrl}/fuel/cards/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/fuel/cards/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -862,7 +860,7 @@ export default function FuelPage({ apiUrl }: FuelPageProps) {
                         fill="#8884d8"
                         dataKey="fuel"
                       >
-                        {fuelByVehicle.map((entry, index) => (
+                        {fuelByVehicle.map((_entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>

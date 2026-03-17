@@ -4,9 +4,7 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 
-interface AssignmentsPageProps {
-  apiUrl: string;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface Assignment {
   id: string;
@@ -64,7 +62,7 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-100 text-red-800'
 };
 
-export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
+export default function AssignmentsPage() {
   const [activeTab, setActiveTab] = useState<'current' | 'history' | 'create'>('current');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -73,7 +71,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   const [error, setError] = useState('');
   
   // Form state
-  const [showForm, setShowForm] = useState(false);
+  const [_showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     vehicle_id: '',
     driver_id: '',
@@ -88,7 +86,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
     if (token) {
       fetchAllData();
     }
-  }, [apiUrl, token]);
+  }, [API_BASE_URL, token]);
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -107,12 +105,12 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   };
 
   const fetchAssignments = async () => {
-    const res = await fetch(`${apiUrl}/assignments`, {
+    const res = await fetch(`${API_BASE_URL}/assignments`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
       // Fallback to routes endpoint if assignments doesn't exist
-      const routesRes = await fetch(`${apiUrl}/routes`, {
+      const routesRes = await fetch(`${API_BASE_URL}/routes`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!routesRes.ok) throw new Error('Failed to fetch assignments');
@@ -140,7 +138,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   };
 
   const fetchVehicles = async () => {
-    const res = await fetch(`${apiUrl}/vehicles`, {
+    const res = await fetch(`${API_BASE_URL}/vehicles`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch vehicles');
@@ -149,12 +147,12 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   };
 
   const fetchDrivers = async () => {
-    const res = await fetch(`${apiUrl}/staff/drivers`, {
+    const res = await fetch(`${API_BASE_URL}/staff/drivers`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
       // Fallback to staff endpoint
-      const staffRes = await fetch(`${apiUrl}/staff`, {
+      const staffRes = await fetch(`${API_BASE_URL}/staff`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!staffRes.ok) throw new Error('Failed to fetch drivers');
@@ -173,7 +171,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   const submitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${apiUrl}/assignments`, {
+      const res = await fetch(`${API_BASE_URL}/assignments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +188,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
       
       if (!res.ok) {
         // Fallback: create a route entry
-        const routeRes = await fetch(`${apiUrl}/routes`, {
+        const routeRes = await fetch(`${API_BASE_URL}/routes`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -224,7 +222,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   const completeAssignment = async (id: string) => {
     if (!confirm('Mark this assignment as completed?')) return;
     try {
-      const res = await fetch(`${apiUrl}/assignments/${id}/complete`, {
+      const res = await fetch(`${API_BASE_URL}/assignments/${id}/complete`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -239,7 +237,7 @@ export default function AssignmentsPage({ apiUrl }: AssignmentsPageProps) {
   const cancelAssignment = async (id: string) => {
     if (!confirm('Are you sure you want to cancel this assignment?')) return;
     try {
-      const res = await fetch(`${apiUrl}/assignments/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/assignments/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

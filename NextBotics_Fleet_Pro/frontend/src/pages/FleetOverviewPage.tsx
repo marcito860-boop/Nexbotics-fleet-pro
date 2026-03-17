@@ -4,10 +4,6 @@ import {
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from 'recharts';
 
-interface FleetOverviewPageProps {
-  apiUrl: string;
-}
-
 interface Vehicle {
   id: string;
   registration_num: string;
@@ -45,6 +41,7 @@ interface UtilizationData {
   utilizationRate: number;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899'];
 const STATUS_COLORS = {
   'Active': 'bg-green-100 text-green-800',
@@ -53,7 +50,7 @@ const STATUS_COLORS = {
   'Inactive': 'bg-red-100 text-red-800'
 };
 
-export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
+export default function FleetOverviewPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -67,13 +64,13 @@ export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
     if (token) {
       fetchVehicles();
     }
-  }, [apiUrl, token]);
+  }, [API_BASE_URL, token]);
 
   const fetchVehicles = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${apiUrl}/vehicles`, {
+      const res = await fetch(`${API_BASE_URL}/vehicles`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch vehicles');
@@ -152,17 +149,17 @@ export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
 
   // Chart data
   const departmentData = useMemo(() => 
-    Object.entries(metrics.byDepartment).map(([name, value]) => ({ name, value })),
+    Object.entries(metrics.byDepartment).map(([, value]) => ({ value })),
     [metrics.byDepartment]
   );
 
   const ownershipData = useMemo(() => 
-    Object.entries(metrics.byOwnership).map(([name, value]) => ({ name, value })),
+    Object.entries(metrics.byOwnership).map(([, value]) => ({ value })),
     [metrics.byOwnership]
   );
 
   const statusData = useMemo(() => 
-    Object.entries(metrics.byStatus).map(([name, value]) => ({ name, value })),
+    Object.entries(metrics.byStatus).map(([, value]) => ({ value })),
     [metrics.byStatus]
   );
 
@@ -314,12 +311,12 @@ export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${value}`}
+                        label={({ value }) => `${value}`}
                         outerRadius={70}
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        {statusData.map((entry, index) => (
+                        {statusData.map((_entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -338,12 +335,12 @@ export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${value}`}
+                        label={({ value }) => `${value}`}
                         outerRadius={70}
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        {departmentData.map((entry, index) => (
+                        {departmentData.map((_entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -362,12 +359,12 @@ export default function FleetOverviewPage({ apiUrl }: FleetOverviewPageProps) {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${value}`}
+                        label={({ value }) => `${value}`}
                         outerRadius={70}
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        {ownershipData.map((entry, index) => (
+                        {ownershipData.map((_entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>

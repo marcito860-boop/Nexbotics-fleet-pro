@@ -1,9 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Bell, AlertTriangle, CheckCircle, XCircle, Info, Calendar, Shield, Wrench, FileText } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';
 
-interface AlertsPageProps {
-  apiUrl: string;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface Alert {
   id: string;
@@ -42,7 +40,7 @@ const TYPE_ICONS = {
   system: '⚙️'
 };
 
-export default function AlertsPage({ apiUrl }: AlertsPageProps) {
+export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,14 +53,14 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
     if (token) {
       fetchAlerts();
     }
-  }, [apiUrl, token]);
+  }, [API_BASE_URL, token]);
 
   const fetchAlerts = async () => {
     setLoading(true);
     setError('');
     try {
       // Try to fetch from alerts API
-      const res = await fetch(`${apiUrl}/alerts`, {
+      const res = await fetch(`${API_BASE_URL}/alerts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -86,7 +84,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
       const newAlerts: Alert[] = [];
       
       // Fetch maintenance due from vehicles
-      const vehiclesRes = await fetch(`${apiUrl}/vehicles`, {
+      const vehiclesRes = await fetch(`${API_BASE_URL}/vehicles`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (vehiclesRes.ok) {
@@ -119,7 +117,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
       }
       
       // Fetch document expiries from staff (licenses)
-      const staffRes = await fetch(`${apiUrl}/staff`, {
+      const staffRes = await fetch(`${API_BASE_URL}/staff`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (staffRes.ok) {
@@ -152,7 +150,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
       }
       
       // Fetch risk alerts
-      const riskRes = await fetch(`${apiUrl}/risk-intelligence/alerts`, {
+      const riskRes = await fetch(`${API_BASE_URL}/risk-intelligence/alerts`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (riskRes.ok) {
@@ -183,7 +181,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
 
   const markAsRead = async (alertId: string) => {
     try {
-      const res = await fetch(`${apiUrl}/alerts/${alertId}/read`, {
+      const res = await fetch(`${API_BASE_URL}/alerts/${alertId}/read`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -209,7 +207,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
 
   const dismissAlert = async (alertId: string) => {
     try {
-      const res = await fetch(`${apiUrl}/alerts/${alertId}/dismiss`, {
+      const res = await fetch(`${API_BASE_URL}/alerts/${alertId}/dismiss`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -226,7 +224,7 @@ export default function AlertsPage({ apiUrl }: AlertsPageProps) {
 
   const resolveAlert = async (alertId: string) => {
     try {
-      const res = await fetch(`${apiUrl}/alerts/${alertId}/resolve`, {
+      const res = await fetch(`${API_BASE_URL}/alerts/${alertId}/resolve`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
