@@ -1470,17 +1470,26 @@ CREATE TRIGGER update_integrations_updated_at
 `;
 
 async function initDatabase() {
-  const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'postgres',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || '',
-  });
+  // Use DATABASE_URL if available (Render), otherwise fall back to individual vars
+  const poolConfig = process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432'),
+        database: 'postgres',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+      };
+
+  const pool = new Pool(poolConfig);
 
   try {
-    // Create database if it doesn't exist
     const dbName = process.env.DB_NAME || 'nextbotics_fleet_pro';
+    
+    // Check if database exists
     const dbExists = await pool.query(
       'SELECT 1 FROM pg_database WHERE datname = $1',
       [dbName]
@@ -1496,13 +1505,20 @@ async function initDatabase() {
     await pool.end();
 
     // Connect to the actual database and run schema
-    const appPool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432'),
-      database: dbName,
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || '',
-    });
+    const appPoolConfig = process.env.DATABASE_URL
+      ? {
+          connectionString: process.env.DATABASE_URL,
+          ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        }
+      : {
+          host: process.env.DB_HOST || 'localhost',
+          port: parseInt(process.env.DB_PORT || '5432'),
+          database: dbName,
+          user: process.env.DB_USER || 'postgres',
+          password: process.env.DB_PASSWORD || '',
+        };
+
+    const appPool = new Pool(appPoolConfig);
 
     await appPool.query(initSQL);
     console.log('✅ Database schema initialized');
