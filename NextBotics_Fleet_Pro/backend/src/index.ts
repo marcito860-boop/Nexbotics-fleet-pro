@@ -49,7 +49,8 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
       process.env.FRONTEND_URL,
       'https://nexbotics-fleet-pro.vercel.app',
       'https://nexbotics-fleet-pro-git-master-marcito860-boops-projects.vercel.app',
-      'https://nexbotics-fleet-9lcc234lf-marcito860-boops-projects.vercel.app'
+      'https://nexbotics-fleet-9lcc234lf-marcito860-boops-projects.vercel.app',
+      'https://nexbotics-fleet-nrg4z6gbo-marcito860-boops-projects.vercel.app'
     ].filter((url): url is string => !!url)
   : ['http://localhost:5173', 'http://localhost:3000'];
 
