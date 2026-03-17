@@ -98,24 +98,6 @@ app.use('/api/fleet/suppliers', supplierRoutes);
 app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
 
-// Temporary password reset endpoint
-import { SuperAdminModel } from './models/SuperAdmin';
-import { hashPassword } from './utils/password';
-import { query } from './database';
-
-app.get('/api/fix-superadmin', async (req, res) => {
-  try {
-    const passwordHash = await hashPassword('SuperAdmin123!');
-    await query(
-      `UPDATE super_admins SET password_hash = $1 WHERE email = $2`,
-      [passwordHash, 'superadmin@nextbotics.com']
-    );
-    res.json({ success: true, message: 'Super admin password reset' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: 'Reset failed' });
-  }
-});
-
 // GraphQL endpoint
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 app.use('/graphql', authMiddleware, createHandler({
