@@ -98,6 +98,56 @@ app.use('/api/fleet/suppliers', supplierRoutes);
 app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
 
+// Temporary seed endpoint (remove after use)
+import { SuperAdminModel } from './models/SuperAdmin';
+import { CompanyModel } from './models/Company';
+
+app.get('/api/seed', async (req, res) => {
+  try {
+    // Check if super admin exists
+    let superAdmin = await SuperAdminModel.findByEmail('superadmin@nextbotics.com');
+    
+    if (!superAdmin) {
+      superAdmin = await SuperAdminModel.create(
+        'superadmin@nextbotics.com',
+        'SuperAdmin123!',
+        'Super',
+        'Admin'
+      );
+    }
+
+    // Check if demo company exists
+    let company = await CompanyModel.findBySlug('nextbotics-demo');
+    
+    if (!company) {
+      const { query } = await import('./database');
+      await query(
+        `INSERT INTO companies (name, slug, subscription_plan, subscription_status)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (slug) DO NOTHING`,
+        ['NextBotics Demo', 'nextbotics-demo', 'enterprise', 'active']
+      );
+      company = await CompanyModel.findBySlug('nextbotics-demo');
+    }
+
+    res.json({
+      success: true,
+      message: 'Seed completed',
+      superAdmin: {
+        email: superAdmin?.email,
+        firstName: superAdmin?.firstName
+      },
+      company: company ? {
+        name: company.name,
+        slug: company.slug
+      } : null
+    });
+  } catch (error) {
+    console.error('Seed error:', error);
+    res.status(500).json({ success: false, error: 'Seed failed' });
+  }
+});
+
 // GraphQL endpoint
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 app.use('/graphql', authMiddleware, createHandler({
