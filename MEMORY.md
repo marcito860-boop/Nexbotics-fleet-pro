@@ -106,3 +106,67 @@ Actions:
 ## Contact
 - Return to this project when ready for upgrades
 - Reference this memory file for all planned features
+
+---
+
+# NextBotics Fleet Pro (New Project)
+
+## Project Overview
+- **Owner:** Trevis Masai
+- **Location:** `/root/.openclaw/workspace/NextBotics_Fleet_Pro/`
+- **Status:** Core system complete, ready for development
+- **Date Created:** March 17, 2026
+
+## Description
+Multi-company SaaS fleet management backbone with complete data isolation.
+
+## Features Implemented
+- Multi-company SaaS architecture
+- JWT Authentication with role-based access
+- User roles: admin, manager, staff
+- Auto-generated passwords for new users
+- Mandatory password change on first login
+- Company data isolation at database level
+- Super admin cross-company access
+
+## Technical Stack
+- **Backend:** Node.js + Express + TypeScript + PostgreSQL
+- **Frontend:** React + TypeScript + Tailwind CSS + Vite
+- **State Management:** Zustand
+- **Auth:** JWT with bcrypt
+- **Forms:** React Hook Form + Zod
+
+## Default Credentials
+**Super Admin:**
+- Email: `superadmin@nextbotics.com`
+- Password: `SuperAdmin123!`
+
+## Project Structure
+```
+NextBotics_Fleet_Pro/
+├── backend/     # API server (port 3001)
+└── frontend/    # React app (port 5173)
+```
+
+## Quick Start
+```bash
+# Backend
+cd backend && npm install && npm run db:init && npm run dev
+
+# Frontend
+cd frontend && npm install && npm run dev
+```
+
+## API Endpoints
+- `POST /api/auth/login` - Login
+- `POST /api/auth/change-password` - Change password
+- `GET /api/auth/me` - Current user
+- `GET /api/users` - List users
+- `POST /api/users` - Create user
+- `GET /api/companies` - List companies
+- `POST /api/companies` - Create company
+
+## Notes
+- Backend and frontend are fully connected
+- Not deployed (local development only)
+- Ready for extension with fleet-specific features
