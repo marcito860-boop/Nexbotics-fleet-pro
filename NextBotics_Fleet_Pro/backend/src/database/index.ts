@@ -37,13 +37,6 @@ export async function query(
 ): Promise<any[]> {
   const client = await pool.connect();
   try {
-    // Set company context for RLS-like behavior
-    if (context?.companyId) {
-      await client.query('SET app.current_company_id = $1', [context.companyId]);
-    } else {
-      await client.query('SET app.current_company_id = NULL');
-    }
-    
     const result = await client.query(sql, params);
     return result.rows;
   } finally {
@@ -59,11 +52,6 @@ export async function transaction<T>(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    if (context?.companyId) {
-      await client.query('SET app.current_company_id = $1', [context.companyId]);
-    }
-    
     const result = await callback(client);
     await client.query('COMMIT');
     return result;
