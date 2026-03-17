@@ -12,9 +12,12 @@ import InventoryPage from './pages/InventoryPage';
 import InvoicesPage from './pages/InvoicesPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import TVDisplay from './pages/TVDisplay';
+import FuelPage from './pages/FuelPage';
+import AssignmentsPage from './pages/AssignmentsPage';
+import FleetOverviewPage from './pages/FleetOverviewPage';
+import AlertsPage from './pages/AlertsPage';
 import {
-  AuditsPage, TrainingPage, RisksPage, FuelPage,
-  AssignmentsPage, FleetOverviewPage, AlertsPage, SettingsPage
+  AuditsPage, TrainingPage, RisksPage, SettingsPage
 } from './pages/PlaceholderPages';
 
 // Protected route component
