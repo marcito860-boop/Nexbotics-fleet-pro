@@ -35,8 +35,14 @@ class ApiService {
       (response) => response,
       (error: AxiosError<ApiResponse>) => {
         if (error.response?.status === 401) {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
+          // Don't redirect if this is the login request itself or already on login page
+          const isLoginRequest = error.config?.url?.includes('/auth/login');
+          const isOnLoginPage = window.location.pathname === '/login';
+
+          if (!isLoginRequest && !isOnLoginPage) {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(error);
       }
