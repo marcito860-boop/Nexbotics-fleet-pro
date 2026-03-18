@@ -40,10 +40,10 @@ router.post('/seed-data', authMiddleware, async (req: Request, res: Response) =>
 
     let vehicleCount = 0;
     for (const v of vehicles) {
-      const existing = await query('SELECT id FROM vehicles WHERE plate_number = $1 AND company_id = $2', [v.plate, companyId]);
+      const existing = await query('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [v.plate, companyId]);
       if (existing.length === 0) {
         await query(
-          `INSERT INTO vehicles (company_id, plate_number, make, model, year, type, status, fuel_type, current_mileage, created_at, updated_at)
+          `INSERT INTO vehicles (company_id, registration_number, make, model, year, type, status, fuel_type, current_mileage, created_at, updated_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())`,
           [companyId, v.plate, v.make, v.model, v.year, v.type, v.status, v.fuelType, v.mileage]
         );
