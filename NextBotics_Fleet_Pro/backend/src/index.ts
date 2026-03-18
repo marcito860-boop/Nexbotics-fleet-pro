@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+// Build: 2026-03-19-03-55 - Force redeploy
+
 // Import routes
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
