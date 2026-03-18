@@ -333,4 +333,88 @@ router.put('/preferences', async (req: Request, res: Response) => {
   }
 });
 
+// ==========================================
+// SECURITY SETTINGS (2FA, Password Policy, etc.)
+// ==========================================
+
+router.get('/security', requireRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const companyId = (req as any).user?.companyId;
+    const result = await query(`
+      SELECT * FROM security_settings
+      WHERE company_id = $1
+    `, [companyId]);
+    
+    if (!result || result.length === 0) {
+      return res.json({
+        require2FA: false,
+        passwordMinLength: 8,
+        passwordRequireUppercase: true,
+        passwordRequireNumbers: true,
+        passwordRequireSymbols: false,
+        sessionTimeoutMinutes: 60,
+        maxLoginAttempts: 5,
+        lockoutDurationMinutes: 30,
+        ipWhitelistEnabled: false,
+        ipWhitelist: [],
+        auditLogRetentionDays: 365,
+      });
+    }
+    
+    res.json(result[0]);
+  } catch (error) {
+    console.error('Error fetching security settings:', error);
+    res.status(500).json({ error: 'Failed to fetch security settings' });
+  }
+});
+
+router.put('/security', requireRole(['admin']), async (req: Request, res: Response) => {
+  try {
+    const companyId = (req as any).user?.companyId;
+    const {
+      require2FA, passwordMinLength, passwordRequireUppercase, passwordRequireNumbers,
+      passwordRequireSymbols, sessionTimeoutMinutes, maxLoginAttempts, lockoutDurationMinutes,
+      ipWhitelistEnabled, ipWhitelist, auditLogRetentionDays
+    } = req.body;
+
+    const existing = await query('SELECT id FROM security_settings WHERE company_id = $1', [companyId]);
+    
+    if (existing && existing.length > 0) {
+      const result = await query(`
+        UPDATE security_settings
+        SET require_2fa = $1, password_min_length = $2, password_require_uppercase = $3, 
+            password_require_numbers = $4, password_require_symbols = $5, 
+            session_timeout_minutes = $6, max_login_attempts = $7, lockout_duration_minutes = $8,
+            ip_whitelist_enabled = $9, ip_whitelist = $10, audit_log_retention_days = $11,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $12
+        RETURNING *
+      `, [
+        require2FA, passwordMinLength, passwordRequireUppercase, passwordRequireNumbers,
+        passwordRequireSymbols, sessionTimeoutMinutes, maxLoginAttempts, lockoutDurationMinutes,
+        ipWhitelistEnabled, ipWhitelist, auditLogRetentionDays, existing[0].id
+      ]);
+      res.json(result[0]);
+    } else {
+      const result = await query(`
+        INSERT INTO security_settings (
+          company_id, require_2fa, password_min_length, password_require_uppercase, 
+          password_require_numbers, password_require_symbols, session_timeout_minutes, 
+          max_login_attempts, lockout_duration_minutes, ip_whitelist_enabled, ip_whitelist, 
+          audit_log_retention_days
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *
+      `, [
+        companyId, require2FA, passwordMinLength, passwordRequireUppercase, passwordRequireNumbers,
+        passwordRequireSymbols, sessionTimeoutMinutes, maxLoginAttempts, lockoutDurationMinutes,
+        ipWhitelistEnabled, ipWhitelist, auditLogRetentionDays
+      ]);
+      res.json(result[0]);
+    }
+  } catch (error) {
+    console.error('Error saving security settings:', error);
+    res.status(500).json({ error: 'Failed to save security settings' });
+  }
+});
+
 export default router;
