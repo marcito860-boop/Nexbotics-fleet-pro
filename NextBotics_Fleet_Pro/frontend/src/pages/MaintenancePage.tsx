@@ -642,7 +642,7 @@ export default function MaintenancePage() {
                           <p className="text-sm text-gray-500 capitalize">{schedule.serviceType}</p>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900 capitalize">{schedule.scheduleType.replace('_', ' ')}</span>
+                          <span className="text-sm text-gray-900 capitalize">{(schedule.scheduleType || '').replace('_', ' ')}</span>
                           {schedule.nextServiceMileage && (
                             <p className="text-xs text-gray-500">@ {schedule.nextServiceMileage.toLocaleString()} km</p>
                           )}

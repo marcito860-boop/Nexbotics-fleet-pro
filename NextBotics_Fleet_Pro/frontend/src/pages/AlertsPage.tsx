@@ -446,7 +446,7 @@ export default function AlertsPage() {
                         </span>
                       )}
                       
-                      <span>🕐 {new Date(alert.created_at).toLocaleString()}</span>
+                      <span>🕐 {alert.created_at ? new Date(alert.created_at).toLocaleString() : 'N/A'}</span>
                     </div>
                   </div>
                   

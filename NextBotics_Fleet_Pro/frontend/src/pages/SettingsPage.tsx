@@ -1583,7 +1583,7 @@ function UserPreferencesTab({ API_BASE_URL, token, onSave, saving, setSaving }: 
       {user && (
         <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl">
           <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-            {user.name?.[0]?.toUpperCase() || user.email[0].toUpperCase()}
+            {user.name?.[0]?.toUpperCase() || (user.email || '')[0]?.toUpperCase()}
           </div>
           <div className="flex-1">
             <h3 className="font-semibold">{user.name || user.email}</h3>

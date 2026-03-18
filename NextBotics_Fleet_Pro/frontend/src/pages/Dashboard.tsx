@@ -19,7 +19,7 @@ export default function Dashboard() {
   if (!user) return null;
 
   const stats = [
-    { name: 'Role', value: user.role.charAt(0).toUpperCase() + user.role.slice(1), icon: Shield },
+    { name: 'Role', value: (user.role || '').charAt(0).toUpperCase() + (user.role || '').slice(1), icon: Shield },
     { name: 'Company', value: company?.name || 'N/A', icon: Building2 },
     { name: 'Status', value: 'Active', icon: UserIcon },
   ];

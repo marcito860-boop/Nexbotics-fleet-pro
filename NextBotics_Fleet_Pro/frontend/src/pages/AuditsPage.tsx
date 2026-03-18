@@ -256,7 +256,7 @@ export default function AuditsPage() {
     })) || [];
 
     const radarData = analytics.byTemplate?.map(t => ({
-      subject: t.template_name.split(' ')[0],
+      subject: (t.template_name || '').split(' ')[0],
       A: Math.round(t.avg_compliance || 0),
       fullMark: 100
     })) || [];

@@ -103,20 +103,20 @@ export default function TripsPage() {
                         </div>
                         <div>
                           <div className="flex items-center">
-                            <span className="font-semibold text-gray-900">{trip.vehicle?.registrationNumber}</span>
+                            <span className="font-semibold text-gray-900">{trip.vehicle?.registrationNumber || 'N/A'}</span>
                             <span className={`ml-3 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${getStatusColor(trip.status)}`}>
-                              {trip.status.replace('_', ' ')}
+                              {(trip.status || '').replace('_', ' ')}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">{trip.purpose}</p>
+                          <p className="text-sm text-gray-600 mt-1">{trip.purpose || 'No purpose'}</p>
                           <div className="flex items-center mt-2 text-sm text-gray-500 space-x-4">
                             <span className="flex items-center">
                               <Clock className="h-4 w-4 mr-1" />
-                              {new Date(trip.startTime).toLocaleString()}
+                              {trip.startTime ? new Date(trip.startTime).toLocaleString() : 'N/A'}
                             </span>
                             <span className="flex items-center">
                               <MapPin className="h-4 w-4 mr-1" />
-                              {trip.distanceKm.toFixed(1)} km
+                              {(trip.distanceKm || 0).toFixed(1)} km
                             </span>
                           </div>
                         </div>

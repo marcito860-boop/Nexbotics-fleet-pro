@@ -138,7 +138,7 @@ export default function RequisitionsPage() {
                           <div className="flex items-center">
                             <h3 className="font-semibold text-gray-900">{req.requestNumber}</h3>
                             <span className={`ml-3 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${getStatusColor(req.status)}`}>
-                              {req.status.replace('_', ' ')}
+                              {(req.status || '').replace('_', ' ')}
                             </span>
                             <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full capitalize ${getPriorityColor(req.priority)}`}>
                               {req.priority}
