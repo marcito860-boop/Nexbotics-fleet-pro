@@ -9,6 +9,8 @@ export interface User {
   role: UserRole;
   mustChangePassword: boolean;
   type?: 'user' | 'super_admin';
+  phone?: string;
+  isActive?: boolean;
 }
 
 export interface Company {
