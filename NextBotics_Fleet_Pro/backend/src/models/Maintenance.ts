@@ -1678,7 +1678,7 @@ export class MaintenanceReminderModel {
       [companyId]
     );
 
-    return result.rowCount || 0;
+    return (result as any).length || 0;
   }
 
   static async getStats(companyId: string): Promise<{

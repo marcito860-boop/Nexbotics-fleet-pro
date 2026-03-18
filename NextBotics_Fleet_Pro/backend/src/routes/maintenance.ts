@@ -153,8 +153,6 @@ router.put('/providers/:id', [
       bankAccount: req.body.bankAccount,
       specialties: req.body.specialties,
       workingHours: req.body.workingHours,
-      isApproved: req.body.isApproved,
-      isActive: req.body.isActive,
       notes: req.body.notes,
     });
 
@@ -327,7 +325,6 @@ router.put('/parts/:id', [
       locationCode: req.body.locationCode,
       supplierId: req.body.supplierId,
       leadTimeDays: req.body.leadTimeDays,
-      isActive: req.body.isActive,
     });
 
     if (!part) {
