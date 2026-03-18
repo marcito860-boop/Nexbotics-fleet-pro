@@ -791,6 +791,17 @@ class ApiService {
     return response.data;
   }
 
+  // Settings
+  async getSettings(type: string): Promise<ApiResponse<any>> {
+    const response = await this.client.get(`/settings/${type}`);
+    return response.data;
+  }
+
+  async updateSettings(type: string, data: any): Promise<ApiResponse> {
+    const response = await this.client.put(`/settings/${type}`, data);
+    return response.data;
+  }
+
   // Generic HTTP methods for flexibility
   async get<T = any>(url: string, config?: any): Promise<{ data: T }> {
     const response = await this.client.get(url, config);

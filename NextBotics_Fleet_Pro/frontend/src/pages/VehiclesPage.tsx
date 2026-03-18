@@ -1,10 +1,33 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Car, Plus, Search, Filter, Edit2, Trash2 } from 'lucide-react';
+import { Car, Plus, Search, Filter, Edit2, Trash2, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
-import { Vehicle } from '../types/fleet';
+import { Vehicle, VehicleType, FuelType } from '../types/fleet';
 import DashboardLayout from '../components/Layout';
+
+interface VehicleFormData {
+  registrationNumber: string;
+  make: string;
+  model: string;
+  year: number;
+  type: VehicleType;
+  fuelType: FuelType;
+  mileage: number;
+}
+
+const initialFormData: VehicleFormData = {
+  registrationNumber: '',
+  make: '',
+  model: '',
+  year: new Date().getFullYear(),
+  type: 'sedan',
+  fuelType: 'petrol',
+  mileage: 0,
+};
+
+const vehicleTypes: VehicleType[] = ['sedan', 'suv', 'truck', 'van', 'bus', 'motorcycle', 'other'];
+const fuelTypes: FuelType[] = ['petrol', 'diesel', 'electric', 'hybrid', 'cng'];
 
 export default function VehiclesPage() {
   const navigate = useNavigate();
@@ -13,6 +36,17 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  
+  // Form states
+  const [formData, setFormData] = useState<VehicleFormData>(initialFormData);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -25,15 +59,9 @@ export default function VehiclesPage() {
   const loadVehicles = async () => {
     try {
       setLoading(true);
-      console.log('Fetching vehicles...');
       const response = await api.getVehicles({ limit: 50 });
-      console.log('Vehicles response:', response);
       if (response.success) {
-        console.log('Vehicles data:', response.data);
-        console.log('Vehicles items:', response.data?.items);
         setVehicles(response.data?.items || []);
-      } else {
-        console.error('Vehicles API error:', response.error);
       }
     } catch (error) {
       console.error('Failed to load vehicles:', error);
@@ -60,13 +88,159 @@ export default function VehiclesPage() {
     }
   };
 
+  // Create Vehicle
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    // Validation
+    if (!formData.registrationNumber.trim()) {
+      setError('Registration number is required');
+      return;
+    }
+    if (!formData.make.trim()) {
+      setError('Make is required');
+      return;
+    }
+    if (!formData.model.trim()) {
+      setError('Model is required');
+      return;
+    }
+    if (formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
+      setError('Please enter a valid year');
+      return;
+    }
+    if (formData.mileage < 0) {
+      setError('Mileage cannot be negative');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await api.createVehicle(formData);
+      if (response.success) {
+        setShowCreateModal(false);
+        setFormData(initialFormData);
+        loadVehicles();
+      } else {
+        setError(response.error || 'Failed to create vehicle');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create vehicle');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Edit Vehicle
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVehicle) return;
+    
+    setError('');
+    
+    // Validation
+    if (!formData.registrationNumber.trim()) {
+      setError('Registration number is required');
+      return;
+    }
+    if (!formData.make.trim()) {
+      setError('Make is required');
+      return;
+    }
+    if (!formData.model.trim()) {
+      setError('Model is required');
+      return;
+    }
+    if (formData.year < 1900 || formData.year > new Date().getFullYear() + 1) {
+      setError('Please enter a valid year');
+      return;
+    }
+    if (formData.mileage < 0) {
+      setError('Mileage cannot be negative');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await api.updateVehicle(selectedVehicle.id, formData);
+      if (response.success) {
+        setShowEditModal(false);
+        setSelectedVehicle(null);
+        setFormData(initialFormData);
+        loadVehicles();
+      } else {
+        setError(response.error || 'Failed to update vehicle');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to update vehicle');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Delete Vehicle
+  const handleDelete = async () => {
+    if (!selectedVehicle) return;
+    
+    setSaving(true);
+    try {
+      const response = await api.deleteVehicle(selectedVehicle.id);
+      if (response.success) {
+        setShowDeleteModal(false);
+        setSelectedVehicle(null);
+        loadVehicles();
+      } else {
+        setError(response.error || 'Failed to delete vehicle');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete vehicle');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setFormData({
+      registrationNumber: vehicle.registrationNumber,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      type: vehicle.type,
+      fuelType: vehicle.fuelType,
+      mileage: vehicle.mileage,
+    });
+    setError('');
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (vehicle: Vehicle) => {
+    setSelectedVehicle(vehicle);
+    setError('');
+    setShowDeleteModal(true);
+  };
+
+  const closeModals = () => {
+    setShowCreateModal(false);
+    setShowEditModal(false);
+    setShowDeleteModal(false);
+    setSelectedVehicle(null);
+    setFormData(initialFormData);
+    setError('');
+  };
+
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Vehicles</h1>
           <button
-            onClick={() => alert('Add vehicle feature coming soon')}
+            onClick={() => {
+              setFormData(initialFormData);
+              setError('');
+              setShowCreateModal(true);
+            }}
             className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 transition-colors"
           >
             <Plus className="h-5 w-5 mr-2" />
@@ -156,14 +330,16 @@ export default function VehiclesPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
-                            onClick={() => alert(`Edit vehicle: ${vehicle.registrationNumber}`)}
+                            onClick={() => openEditModal(vehicle)}
                             className="text-amber-600 hover:text-amber-700 mr-3"
+                            title="Edit vehicle"
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
                           <button
-                            onClick={() => alert(`Delete vehicle: ${vehicle.registrationNumber}`)}
+                            onClick={() => openDeleteModal(vehicle)}
                             className="text-red-600 hover:text-red-700"
+                            title="Delete vehicle"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -177,6 +353,340 @@ export default function VehiclesPage() {
           )}
         </div>
       </div>
+
+      {/* Create Vehicle Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Add New Vehicle</h2>
+              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreate} className="p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm">
+                  {error}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Registration Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.registrationNumber}
+                  onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  placeholder="e.g., ABC-1234"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Make *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.make}
+                    onChange={(e) => setFormData({ ...formData, make: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="e.g., Toyota"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.model}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="e.g., Camry"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Year *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1900"
+                    max={new Date().getFullYear() + 1}
+                    value={formData.year}
+                    onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mileage (km) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={formData.mileage}
+                    onChange={(e) => setFormData({ ...formData, mileage: parseInt(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as VehicleType })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    {vehicleTypes.map(type => (
+                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Fuel Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.fuelType}
+                    onChange={(e) => setFormData({ ...formData, fuelType: e.target.value as FuelType })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    {fuelTypes.map(type => (
+                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModals}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 bg-amber-500 text-slate-900 rounded-lg hover:bg-amber-600 disabled:opacity-50 font-medium"
+                >
+                  {saving ? 'Creating...' : 'Create Vehicle'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Vehicle Modal */}
+      {showEditModal && selectedVehicle && (
+        <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h2 className="text-lg font-semibold text-gray-900">Edit Vehicle</h2>
+              <button onClick={closeModals} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleEdit} className="p-6 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm">
+                  {error}
+                </div>
+              )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Registration Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.registrationNumber}
+                  onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  placeholder="e.g., ABC-1234"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Make *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.make}
+                    onChange={(e) => setFormData({ ...formData, make: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="e.g., Toyota"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Model *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.model}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="e.g., Camry"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Year *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1900"
+                    max={new Date().getFullYear() + 1}
+                    value={formData.year}
+                    onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mileage (km) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={formData.mileage}
+                    onChange={(e) => setFormData({ ...formData, mileage: parseInt(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as VehicleType })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    {vehicleTypes.map(type => (
+                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Fuel Type *
+                  </label>
+                  <select
+                    required
+                    value={formData.fuelType}
+                    onChange={(e) => setFormData({ ...formData, fuelType: e.target.value as FuelType })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    {fuelTypes.map(type => (
+                      <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeModals}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 bg-amber-500 text-slate-900 rounded-lg hover:bg-amber-600 disabled:opacity-50 font-medium"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && selectedVehicle && (
+        <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Delete Vehicle</h2>
+            </div>
+            
+            <div className="p-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded text-sm mb-4">
+                  {error}
+                </div>
+              )}
+              
+              <p className="text-gray-600 mb-4">
+                Are you sure you want to delete <strong>{selectedVehicle.registrationNumber}</strong> ({selectedVehicle.make} {selectedVehicle.model})?
+              </p>
+              <p className="text-sm text-gray-500">
+                This action cannot be undone. All associated data will be permanently removed.
+              </p>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={closeModals}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={saving}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+                >
+                  {saving ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

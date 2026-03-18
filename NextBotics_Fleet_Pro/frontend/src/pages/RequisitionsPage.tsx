@@ -1,18 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
-import { Requisition } from '../types/fleet';
+import { Requisition, Vehicle } from '../types/fleet';
 import DashboardLayout from '../components/Layout';
+
+interface RequisitionFormData {
+  purpose: string;
+  requiredFrom: string;
+  requiredUntil: string;
+  destination: string;
+  numberOfPassengers: number;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  notes: string;
+}
 
 export default function RequisitionsPage() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuthStore();
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const isManager = user?.role === 'admin' || user?.role === 'manager';
+  
+  const [formData, setFormData] = useState<RequisitionFormData>({
+    purpose: '',
+    requiredFrom: '',
+    requiredUntil: '',
+    destination: '',
+    numberOfPassengers: 1,
+    priority: 'normal',
+    notes: '',
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -20,6 +43,9 @@ export default function RequisitionsPage() {
       return;
     }
     loadRequisitions();
+    if (isManager) {
+      loadVehicles();
+    }
   }, [isAuthenticated, navigate, activeTab]);
 
   const loadRequisitions = async () => {
@@ -40,6 +66,78 @@ export default function RequisitionsPage() {
       console.error('Failed to load requisitions:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadVehicles = async () => {
+    try {
+      const response = await api.getVehicles({ limit: 100 });
+      if (response.success) {
+        setVehicles(response.data?.items || []);
+      }
+    } catch (error) {
+      console.error('Failed to load vehicles:', error);
+    }
+  };
+
+  const handleCreateRequisition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.purpose || !formData.requiredFrom || !formData.requiredUntil) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await api.createRequisition(formData);
+      if (response.success) {
+        setShowModal(false);
+        setFormData({
+          purpose: '',
+          requiredFrom: '',
+          requiredUntil: '',
+          destination: '',
+          numberOfPassengers: 1,
+          priority: 'normal',
+          notes: '',
+        });
+        loadRequisitions();
+      } else {
+        alert(response.error || 'Failed to create requisition');
+      }
+    } catch (error: any) {
+      alert(error.message || 'Error creating requisition');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      const response = await api.approveRequisition(id);
+      if (response.success) {
+        loadRequisitions();
+      } else {
+        alert(response.error || 'Failed to approve');
+      }
+    } catch (error: any) {
+      alert(error.message || 'Error approving requisition');
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    
+    try {
+      const response = await api.rejectRequisition(id, reason);
+      if (response.success) {
+        loadRequisitions();
+      } else {
+        alert(response.error || 'Failed to reject');
+      }
+    } catch (error: any) {
+      alert(error.message || 'Error rejecting requisition');
     }
   };
 
@@ -78,13 +176,24 @@ export default function RequisitionsPage() {
     }
   };
 
+  // Set default dates for form
+  const today = new Date().toISOString().split('T')[0];
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
   return (
     <DashboardLayout>
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Vehicle Requisitions</h1>
           <button
-            onClick={() => alert('New requisition form coming soon')}
+            onClick={() => {
+              setFormData(prev => ({
+                ...prev,
+                requiredFrom: today,
+                requiredUntil: tomorrow,
+              }));
+              setShowModal(true);
+            }}
             className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 transition-colors"
           >
             <Plus className="h-5 w-5 mr-2" />
@@ -171,13 +280,13 @@ export default function RequisitionsPage() {
                     {isManager && req.status === 'pending' && (
                       <div className="mt-4 flex items-center space-x-3 pt-4 border-t border-gray-200">
                         <button
-                          onClick={() => api.approveRequisition(req.id)}
+                          onClick={() => handleApprove(req.id)}
                           className="px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600"
                         >
                           Approve
                         </button>
                         <button
-                          onClick={() => api.rejectRequisition(req.id, 'Rejected by manager')}
+                          onClick={() => handleReject(req.id)}
                           className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600"
                         >
                           Reject
@@ -191,6 +300,125 @@ export default function RequisitionsPage() {
           </div>
         </div>
       </div>
+
+      {/* Create Requisition Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">New Vehicle Requisition</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateRequisition} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Purpose *</label>
+                <input
+                  type="text"
+                  value={formData.purpose}
+                  onChange={(e) => setFormData({ ...formData, purpose: e.target.value })}
+                  placeholder="e.g., Client meeting in Nairobi"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Required From *</label>
+                  <input
+                    type="date"
+                    value={formData.requiredFrom}
+                    onChange={(e) => setFormData({ ...formData, requiredFrom: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Required Until *</label>
+                  <input
+                    type="date"
+                    value={formData.requiredUntil}
+                    onChange={(e) => setFormData({ ...formData, requiredUntil: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Destination</label>
+                <input
+                  type="text"
+                  value={formData.destination}
+                  onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                  placeholder="e.g., Nairobi CBD"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Passengers</label>
+                  <input
+                    type="number"
+                    value={formData.numberOfPassengers}
+                    onChange={(e) => setFormData({ ...formData, numberOfPassengers: parseInt(e.target.value) || 1 })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  >
+                    <option value="low">Low</option>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Additional details..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 disabled:opacity-50"
+                >
+                  {saving ? 'Submitting...' : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 }

@@ -6,6 +6,7 @@ import {
   Moon, Sun, Eye, EyeOff, Key, Smartphone, ShieldCheck,
   Upload, Trash2, Plus, Settings as SettingsIcon, Info
 } from 'lucide-react';
+import { api } from '../services/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
