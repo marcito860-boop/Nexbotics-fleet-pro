@@ -5,11 +5,126 @@ const auth_1 = require("../utils/auth");
 const database_1 = require("../database");
 const router = (0, express_1.Router)();
 router.use(auth_1.authMiddleware);
+// Helper to ensure tables exist
+async function ensureSettingsTables() {
+    // company_settings
+    await (0, database_1.query)(`
+    CREATE TABLE IF NOT EXISTS company_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL DEFAULT '',
+      legal_name VARCHAR(255),
+      tax_id VARCHAR(100),
+      registration_number VARCHAR(100),
+      email VARCHAR(255),
+      phone VARCHAR(50),
+      website VARCHAR(255),
+      address JSONB DEFAULT '{"street": "", "city": "", "state": "", "zipCode": "", "country": ""}',
+      timezone VARCHAR(50) DEFAULT 'UTC',
+      currency VARCHAR(10) DEFAULT 'USD',
+      date_format VARCHAR(20) DEFAULT 'MM/DD/YYYY',
+      fiscal_year_start VARCHAR(10) DEFAULT '01-01',
+      logo_url TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+    // fleet_settings
+    await (0, database_1.query)(`
+    CREATE TABLE IF NOT EXISTS fleet_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      default_fuel_type VARCHAR(50) DEFAULT 'Diesel',
+      fuel_unit VARCHAR(20) DEFAULT 'liters',
+      distance_unit VARCHAR(20) DEFAULT 'km',
+      currency VARCHAR(10) DEFAULT 'USD',
+      maintenance_reminder_days INTEGER DEFAULT 7,
+      insurance_reminder_days INTEGER DEFAULT 30,
+      license_reminder_days INTEGER DEFAULT 14,
+      speed_limit INTEGER DEFAULT 80,
+      idle_time_threshold INTEGER DEFAULT 10,
+      geofence_alert_enabled BOOLEAN DEFAULT true,
+      fuel_efficiency_target DECIMAL(5,2) DEFAULT 8.0,
+      co2_emission_factor DECIMAL(5,2) DEFAULT 2.68,
+      default_vehicle_status VARCHAR(50) DEFAULT 'Active',
+      auto_archive_after_days INTEGER DEFAULT 365,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+    // user_preferences
+    await (0, database_1.query)(`
+    CREATE TABLE IF NOT EXISTS user_preferences (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      theme VARCHAR(20) DEFAULT 'system',
+      language VARCHAR(10) DEFAULT 'en',
+      date_format VARCHAR(20) DEFAULT 'MM/DD/YYYY',
+      time_format VARCHAR(10) DEFAULT '12h',
+      timezone VARCHAR(50) DEFAULT 'UTC',
+      sidebar_collapsed BOOLEAN DEFAULT false,
+      dashboard_view VARCHAR(50) DEFAULT 'default',
+      email_notifications BOOLEAN DEFAULT true,
+      push_notifications BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id)
+    )
+  `);
+    // notification_settings
+    await (0, database_1.query)(`
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      email_enabled BOOLEAN DEFAULT true,
+      push_enabled BOOLEAN DEFAULT true,
+      sms_enabled BOOLEAN DEFAULT false,
+      maintenance_alerts BOOLEAN DEFAULT true,
+      fuel_alerts BOOLEAN DEFAULT true,
+      document_expiry_alerts BOOLEAN DEFAULT true,
+      assignment_alerts BOOLEAN DEFAULT true,
+      system_announcements BOOLEAN DEFAULT true,
+      weekly_reports BOOLEAN DEFAULT true,
+      monthly_reports BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id)
+    )
+  `);
+    // security_settings
+    await (0, database_1.query)(`
+    CREATE TABLE IF NOT EXISTS security_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL,
+      require_2fa BOOLEAN DEFAULT false,
+      password_min_length INTEGER DEFAULT 8,
+      password_require_uppercase BOOLEAN DEFAULT true,
+      password_require_numbers BOOLEAN DEFAULT true,
+      password_require_symbols BOOLEAN DEFAULT false,
+      session_timeout_minutes INTEGER DEFAULT 60,
+      max_login_attempts INTEGER DEFAULT 5,
+      lockout_duration_minutes INTEGER DEFAULT 30,
+      ip_whitelist_enabled BOOLEAN DEFAULT false,
+      ip_whitelist TEXT[],
+      audit_log_retention_days INTEGER DEFAULT 365,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(company_id)
+    )
+  `);
+}
+// Ensure tables on first request
+let tablesEnsured = false;
+async function ensureTablesOnce() {
+    if (!tablesEnsured) {
+        await ensureSettingsTables();
+        tablesEnsured = true;
+    }
+}
 // ==========================================
 // COMPANY SETTINGS
 // ==========================================
 router.get('/company', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const result = await (0, database_1.query)(`
       SELECT * FROM company_settings
       ORDER BY created_at DESC
@@ -40,6 +155,7 @@ router.get('/company', async (req, res) => {
 });
 router.put('/company', (0, auth_1.requireRole)(['admin', 'manager']), async (req, res) => {
     try {
+        await ensureTablesOnce();
         const { name, legalName, taxId, registrationNumber, email, phone, website, address, timezone, currency, dateFormat, fiscalYearStart, logoUrl } = req.body;
         const existing = await (0, database_1.query)('SELECT id FROM company_settings LIMIT 1');
         if (existing && existing.length > 0) {
@@ -85,6 +201,7 @@ router.put('/company', (0, auth_1.requireRole)(['admin', 'manager']), async (req
 // ==========================================
 router.get('/fleet', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const result = await (0, database_1.query)(`
       SELECT * FROM fleet_settings
       ORDER BY created_at DESC
@@ -115,6 +232,7 @@ router.get('/fleet', async (req, res) => {
 });
 router.put('/fleet', (0, auth_1.requireRole)(['admin', 'manager']), async (req, res) => {
     try {
+        await ensureTablesOnce();
         const { defaultFuelType, fuelUnit, distanceUnit, currency, maintenanceReminderDays, insuranceReminderDays, licenseReminderDays, speedLimit, idleTimeThreshold, geofenceAlertEnabled, fuelEfficiencyTarget, co2EmissionFactor } = req.body;
         const existing = await (0, database_1.query)('SELECT id FROM fleet_settings LIMIT 1');
         if (existing && existing.length > 0) {
@@ -162,6 +280,7 @@ router.put('/fleet', (0, auth_1.requireRole)(['admin', 'manager']), async (req, 
 // ==========================================
 router.get('/notifications', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const userId = req.user?.userId;
         const result = await (0, database_1.query)(`
       SELECT * FROM notification_settings
@@ -190,6 +309,7 @@ router.get('/notifications', async (req, res) => {
 });
 router.put('/notifications', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const userId = req.user?.userId;
         const { emailEnabled, pushEnabled, smsEnabled, maintenanceAlerts, fuelAlerts, documentExpiryAlerts, assignmentAlerts, systemAnnouncements, weeklyReports, monthlyReports } = req.body;
         const existing = await (0, database_1.query)('SELECT id FROM notification_settings WHERE user_id = $1', [userId]);
@@ -236,6 +356,7 @@ router.put('/notifications', async (req, res) => {
 // ==========================================
 router.get('/preferences', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const userId = req.user?.userId;
         const result = await (0, database_1.query)(`
       SELECT * FROM user_preferences
@@ -263,6 +384,7 @@ router.get('/preferences', async (req, res) => {
 });
 router.put('/preferences', async (req, res) => {
     try {
+        await ensureTablesOnce();
         const userId = req.user?.userId;
         const { theme, language, dateFormat, timeFormat, timezone, sidebarCollapsed, dashboardView, emailNotifications, pushNotifications } = req.body;
         const existing = await (0, database_1.query)('SELECT id FROM user_preferences WHERE user_id = $1', [userId]);
@@ -305,6 +427,7 @@ router.put('/preferences', async (req, res) => {
 // ==========================================
 router.get('/security', (0, auth_1.requireRole)(['admin']), async (req, res) => {
     try {
+        await ensureTablesOnce();
         const companyId = req.user?.companyId;
         const result = await (0, database_1.query)(`
       SELECT * FROM security_settings
@@ -334,6 +457,7 @@ router.get('/security', (0, auth_1.requireRole)(['admin']), async (req, res) => 
 });
 router.put('/security', (0, auth_1.requireRole)(['admin']), async (req, res) => {
     try {
+        await ensureTablesOnce();
         const companyId = req.user?.companyId;
         const { require2FA, passwordMinLength, passwordRequireUppercase, passwordRequireNumbers, passwordRequireSymbols, sessionTimeoutMinutes, maxLoginAttempts, lockoutDurationMinutes, ipWhitelistEnabled, ipWhitelist, auditLogRetentionDays } = req.body;
         const existing = await (0, database_1.query)('SELECT id FROM security_settings WHERE company_id = $1', [companyId]);
