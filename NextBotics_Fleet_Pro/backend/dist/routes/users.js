@@ -135,18 +135,24 @@ router.post('/', [
         let companyId = req.user.companyId;
         const requesterRole = req.user.role;
         const userType = req.user.type;
+        console.log('[DEBUG] Create user - initial companyId:', companyId, 'userType:', userType, 'requesterRole:', requesterRole);
         // Super admins can specify a companyId to create users in any company
         if (userType === 'super_admin' && req.body.companyId) {
             companyId = req.body.companyId;
+            console.log('[DEBUG] Using companyId from body:', companyId);
         }
         // Super admins can also specify companySlug to find the company
         if (userType === 'super_admin' && req.body.companySlug) {
+            console.log('[DEBUG] Looking up company by slug:', req.body.companySlug);
             const company = await Company_1.CompanyModel.findBySlug(req.body.companySlug);
             if (!company) {
+                console.log('[DEBUG] Company not found for slug:', req.body.companySlug);
                 return res.status(404).json({ success: false, error: 'Company not found' });
             }
             companyId = company.id;
+            console.log('[DEBUG] Found company, using ID:', companyId);
         }
+        console.log('[DEBUG] Final companyId:', companyId);
         // Managers can only create staff, not other managers or admins
         if (requesterRole === 'manager' && req.body.role !== 'staff') {
             return res.status(403).json({
@@ -182,7 +188,8 @@ router.post('/', [
         });
     }
     catch (error) {
-        console.error('Create user error:', error);
+        console.error('[DEBUG] Create user error:', error);
+        console.error('[DEBUG] Error stack:', error.stack);
         if (error.message?.includes('already exists')) {
             return res.status(409).json({
                 success: false,
@@ -191,7 +198,7 @@ router.post('/', [
         }
         res.status(500).json({
             success: false,
-            error: 'Failed to create user'
+            error: 'Failed to create user: ' + (error.message || 'Unknown error')
         });
     }
 });
