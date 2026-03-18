@@ -98,6 +98,10 @@ app.use('/api/fleet/suppliers', supplierRoutes);
 app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
 
+// Demo data seeder (no auth required)
+import seedDemoRoutes from './routes/seed-demo';
+app.use('/api', seedDemoRoutes);
+
 // GraphQL endpoint
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 app.use('/graphql', authMiddleware, createHandler({
