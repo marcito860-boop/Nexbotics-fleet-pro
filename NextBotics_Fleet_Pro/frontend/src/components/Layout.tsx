@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Car, Users, ClipboardList, Route,
   Fuel, FileText, GraduationCap, ClipboardCheck, ShieldAlert,
   Package, Receipt, BarChart3, Settings, LogOut, Menu, X,
-  Bell, ChevronDown, Zap, Tv
+  Bell, ChevronDown, Zap, Tv, Wrench
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { clsx, type ClassValue } from 'clsx';
@@ -50,6 +50,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Training', href: '/training', icon: GraduationCap },
     { name: 'Audits', href: '/audits', icon: ClipboardCheck },
     { name: 'Risk Management', href: '/risks', icon: ShieldAlert, roles: ['admin', 'manager'] },
+    { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['admin', 'manager'] },
     { name: 'Inventory', href: '/inventory', icon: Package },
     { name: 'Invoices', href: '/invoices', icon: Receipt, roles: ['admin', 'manager'] },
     { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },

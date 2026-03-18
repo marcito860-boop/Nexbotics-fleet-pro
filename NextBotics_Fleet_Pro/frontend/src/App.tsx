@@ -16,6 +16,7 @@ import FuelPage from './pages/FuelPage';
 import AssignmentsPage from './pages/AssignmentsPage';
 import FleetOverviewPage from './pages/FleetOverviewPage';
 import AlertsPage from './pages/AlertsPage';
+import MaintenancePage from './pages/MaintenancePage';
 import {
   AuditsPage, TrainingPage, RisksPage, SettingsPage
 } from './pages/PlaceholderPages';
@@ -180,6 +181,15 @@ function App() {
         element={
           <ProtectedRoute requireManager>
             <RisksPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/maintenance"
+        element={
+          <ProtectedRoute requireManager>
+            <MaintenancePage />
           </ProtectedRoute>
         }
       />

@@ -28,12 +28,15 @@ import auditRoutes from './routes/audits';
 import trainingRoutes from './routes/training';
 import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
+import integrationProvidersRoutes from './routes/integration-providers';
+import settingsRoutes from './routes/settings';
 import operationsRoutes from './routes/operations';
 import workshopRoutes from './routes/workshop';
 import riskIntelligenceRoutes from './routes/riskIntelligence';
 import photoRoutes from './routes/photos';
 import webhookRoutes from './routes/webhooks';
 import apiV1Routes from './routes/api/v1';
+import seedDemoRoutes from './routes/seed-demo';
 
 // Import services for webhooks and operations
 import * as webhookService from './services/webhook';
@@ -160,6 +163,9 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
+// Demo data seeder (public endpoint)
+app.use('/api/seed-demo', seedDemoRoutes);
+
 // Public routes
 app.use('/api/auth', authRateLimiter, authRoutes);
 
@@ -181,6 +187,12 @@ app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
 
 // Integration routes (includes public API with API key auth)
 app.use('/api/integrations', integrationRoutes);
+
+// Integration providers (ERP, telematics, fuel cards, etc.)
+app.use('/api/integrations/providers', authenticateToken, integrationProvidersRoutes);
+
+// Settings routes
+app.use('/api/settings', authenticateToken, settingsRoutes);
 
 // Operations routes (AI features, live status, fleet health)
 app.use('/api/operations', authenticateToken, operationsRoutes);

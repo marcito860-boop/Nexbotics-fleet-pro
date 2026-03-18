@@ -574,3 +574,190 @@ export interface PlannedRoute {
   createdAt: string;
   updatedAt: string;
 }
+
+// ==================== MAINTENANCE MODULE TYPES ====================
+
+export type ServiceProviderType = 'general' | 'specialist' | 'dealership' | 'emergency';
+export type MaintenanceScheduleType = 'mileage_based' | 'time_based' | 'both';
+export type MaintenanceScheduleStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+export type MaintenancePriority = 'low' | 'normal' | 'high' | 'critical';
+export type ServiceRecordType = 'preventive' | 'repair' | 'breakdown' | 'emergency';
+export type MaintenanceRecordStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+export type DowntimeType = 'maintenance' | 'repair' | 'accident' | 'other';
+export type ReminderStatus = 'pending' | 'sent' | 'acknowledged' | 'dismissed';
+export type ReminderSeverity = 'info' | 'warning' | 'critical';
+
+export interface ServiceProvider {
+  id: string;
+  companyId: string;
+  name: string;
+  type: ServiceProviderType;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  country: string;
+  taxId?: string;
+  bankAccount?: string;
+  isApproved: boolean;
+  rating: number;
+  reviewCount: number;
+  specialties: string[];
+  workingHours?: Record<string, { open: string; close: string }>;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SparePart {
+  id: string;
+  companyId: string;
+  partNumber: string;
+  name: string;
+  description?: string;
+  category: string;
+  manufacturer?: string;
+  compatibleVehicles: string[];
+  unitCost: number;
+  sellingPrice: number;
+  quantityInStock: number;
+  reorderLevel: number;
+  reorderQuantity: number;
+  unitOfMeasure: string;
+  locationCode?: string;
+  supplierId?: string;
+  leadTimeDays: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MaintenanceSchedule {
+  id: string;
+  companyId: string;
+  vehicleId: string;
+  scheduleType: MaintenanceScheduleType;
+  serviceType: string;
+  title: string;
+  description?: string;
+  intervalMileage?: number;
+  lastServiceMileage: number;
+  nextServiceMileage?: number;
+  intervalMonths?: number;
+  lastServiceDate?: string;
+  nextServiceDate?: string;
+  status: MaintenanceScheduleStatus;
+  priority: MaintenancePriority;
+  estimatedCost?: number;
+  estimatedDurationHours?: number;
+  assignedProviderId?: string;
+  reminderDaysBefore: number;
+  reminderMileageBefore: number;
+  createdAt: string;
+  updatedAt: string;
+  // Joined fields
+  vehicleRegistration?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  assignedProviderName?: string;
+}
+
+export interface MaintenancePart {
+  id: string;
+  recordId: string;
+  partId?: string;
+  partNumber: string;
+  partName: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  createdAt: string;
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  companyId: string;
+  vehicleId: string;
+  scheduleId?: string;
+  serviceType: ServiceRecordType;
+  category: string;
+  title: string;
+  description?: string;
+  providerId?: string;
+  providerName?: string;
+  scheduledDate?: string;
+  startedDate?: string;
+  completedDate?: string;
+  serviceMileage?: number;
+  nextServiceMileage?: number;
+  laborCost: number;
+  partsCost: number;
+  otherCost: number;
+  totalCost: number;
+  status: MaintenanceRecordStatus;
+  breakdownLocation?: string;
+  breakdownCause?: string;
+  isEmergency: boolean;
+  technicianName?: string;
+  driverId?: string;
+  warrantyMonths?: number;
+  warrantyExpiry?: string;
+  invoiceNumber?: string;
+  documents?: any[];
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Joined fields
+  vehicleRegistration?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  parts?: MaintenancePart[];
+}
+
+export interface VehicleDowntime {
+  id: string;
+  companyId: string;
+  vehicleId: string;
+  recordId?: string;
+  downtimeType: DowntimeType;
+  startDate: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  durationHours?: number;
+  durationDays?: number;
+  reason?: string;
+  impact?: string;
+  replacementVehicleId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Joined fields
+  vehicleRegistration?: string;
+  replacementVehicleRegistration?: string;
+}
+
+export interface MaintenanceReminder {
+  id: string;
+  companyId: string;
+  scheduleId?: string;
+  vehicleId: string;
+  reminderType: string;
+  title: string;
+  message?: string;
+  dueMileage?: number;
+  dueDate?: string;
+  status: ReminderStatus;
+  severity: ReminderSeverity;
+  notifiedAt?: string;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  createdAt: string;
+  // Joined fields
+  vehicleRegistration?: string;
+  vehicleMake?: string;
+  vehicleModel?: string;
+  scheduleTitle?: string;
+}

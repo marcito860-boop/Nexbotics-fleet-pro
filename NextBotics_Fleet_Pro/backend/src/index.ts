@@ -29,6 +29,7 @@ import integrationRoutes from './routes/integrations';
 import supplierRoutes from './routes/suppliers';
 import documentRoutes from './routes/documents';
 import routePlanningRoutes from './routes/routePlanning';
+import maintenanceRoutes from './routes/maintenance';
 
 // GraphQL
 import { createHandler } from 'graphql-http/lib/use/express';
@@ -97,6 +98,7 @@ app.use('/api/fleet/integrations', integrationRoutes);
 app.use('/api/fleet/suppliers', supplierRoutes);
 app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
+app.use('/api/fleet/maintenance', maintenanceRoutes);
 
 // Demo data seeder (no auth required)
 import seedDemoRoutes from './routes/seed-demo';
@@ -138,6 +140,7 @@ app.get('/', (req, res) => {
       'fleet:suppliers',
       'fleet:documents',
       'fleet:route-planning',
+      'fleet:maintenance',
       'graphql'
     ]
   });
