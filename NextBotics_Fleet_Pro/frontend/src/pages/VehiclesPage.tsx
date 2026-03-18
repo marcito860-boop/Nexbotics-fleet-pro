@@ -43,9 +43,9 @@ export default function VehiclesPage() {
   };
 
   const filteredVehicles = vehicles.filter(v => {
-    const matchesSearch = v.registrationNumber.toLowerCase().includes(search.toLowerCase()) ||
-      v.make.toLowerCase().includes(search.toLowerCase()) ||
-      v.model.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (v.registrationNumber || '').toLowerCase().includes(search.toLowerCase()) ||
+      (v.make || '').toLowerCase().includes(search.toLowerCase()) ||
+      (v.model || '').toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'all' || v.status === filter;
     return matchesSearch && matchesFilter;
   });
@@ -152,7 +152,7 @@ export default function VehiclesPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {vehicle.mileage.toLocaleString()} km
+                          {(vehicle.currentMileage || vehicle.mileage || 0).toLocaleString()} km
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button

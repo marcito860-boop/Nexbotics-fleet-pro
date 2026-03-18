@@ -37,9 +37,9 @@ export default function DriversPage() {
   };
 
   const filteredDrivers = drivers.filter(d =>
-    d.firstName.toLowerCase().includes(search.toLowerCase()) ||
-    d.lastName.toLowerCase().includes(search.toLowerCase()) ||
-    d.licenseNumber.toLowerCase().includes(search.toLowerCase())
+    (d.firstName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (d.lastName || '').toLowerCase().includes(search.toLowerCase()) ||
+    (d.licenseNumber || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const getStatusColor = (status: string) => {
@@ -104,7 +104,7 @@ export default function DriversPage() {
                         </div>
                       </div>
                       <span className={`px-2 py-1 text-xs font-medium rounded-full capitalize ${getStatusColor(driver.employmentStatus)}`}>
-                        {driver.employmentStatus.replace('_', ' ')}
+                        {(driver.employmentStatus || '').replace('_', ' ')}
                       </span>
                     </div>
 
