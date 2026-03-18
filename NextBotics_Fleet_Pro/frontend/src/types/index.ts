@@ -8,6 +8,7 @@ export interface User {
   lastName: string;
   role: UserRole;
   mustChangePassword: boolean;
+  type?: 'user' | 'super_admin';
 }
 
 export interface Company {

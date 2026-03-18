@@ -21,6 +21,7 @@ import IntegrationsPage from './pages/IntegrationsPage';
 import AuditsPage from './pages/AuditsPage';
 import AuditDetailPage from './pages/AuditDetailPage';
 import SettingsPage from './pages/SettingsPage';
+import CompaniesPage from './pages/CompaniesPage';
 import {
   TrainingPage, RisksPage
 } from './pages/PlaceholderPages';
@@ -248,6 +249,15 @@ function App() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/companies"
+        element={
+          <ProtectedRoute>
+            <CompaniesPage />
           </ProtectedRoute>
         }
       />

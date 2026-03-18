@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Car, Users, ClipboardList, Route,
   Fuel, FileText, GraduationCap, ClipboardCheck, ShieldAlert,
   Package, Receipt, BarChart3, Settings, LogOut, Menu, X,
-  Bell, ChevronDown, Zap, Tv, Wrench, Plug
+  Bell, ChevronDown, Zap, Tv, Wrench, Plug, Building2
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { clsx, type ClassValue } from 'clsx';
@@ -24,6 +24,7 @@ interface NavItem {
   icon: React.ElementType;
   roles?: string[];
   badge?: number;
+  showFor?: 'super_admin';
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -40,6 +41,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { name: 'Companies', href: '/companies', icon: Building2, showFor: 'super_admin' },
     { name: 'Fleet Overview', href: '/fleet', icon: Car, roles: ['admin', 'manager'] },
     { name: 'Vehicles', href: '/vehicles', icon: Car },
     { name: 'Drivers', href: '/drivers', icon: Users },
@@ -59,7 +61,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   ];
 
   const filteredNav = navigation.filter(
-    (item) => !item.roles || (user?.role && item.roles.includes(user.role))
+    (item) => {
+      if (item.showFor === 'super_admin') {
+        return user?.type === 'super_admin';
+      }
+      return !item.roles || (user?.role && item.roles.includes(user.role));
+    }
   );
 
   return (
