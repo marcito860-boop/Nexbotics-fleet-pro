@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { getMaturityRating } from '../auditTemplates';
 import { useAuthStore } from '../store/authStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -109,7 +109,7 @@ export default function AuditDetailPage() {
       setCorrectiveActions(data.correctiveActions || []);
       
       // Expand all modules by default
-      const modules = new Set((data.responses || []).map((r: AuditResponse) => r.module_name));
+      const modules = new Set<string>((data.responses || []).map((r: AuditResponse) => r.module_name));
       setExpandedModules(modules);
     } catch (err: any) {
       setError(err.message);
@@ -568,8 +568,7 @@ export default function AuditDetailPage() {
                                     style={{
                                       backgroundColor: response.score === option.value ? option.color : 'transparent',
                                       color: response.score === option.value ? 'white' : option.color,
-                                      border: `1px solid ${option.color}`,
-                                      ringColor: option.value
+                                      border: `1px solid ${option.color}`
                                     }}
                                   >
                                     {option.label}
@@ -638,7 +637,7 @@ export default function AuditDetailPage() {
                       cy="50%" 
                       outerRadius={80} 
                       dataKey="value"
-                      label={({ name, value, percent }) => `${value} (${(percent * 100).toFixed(0)}%)`}
+                      label={({ value, percent }) => `${value} (${((percent || 0) * 100).toFixed(0)}%)`}
                     >
                       {scoreDistribution.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />

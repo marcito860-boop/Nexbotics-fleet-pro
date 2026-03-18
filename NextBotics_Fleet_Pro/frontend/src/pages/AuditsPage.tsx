@@ -3,7 +3,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
-import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { allAuditTemplates, getMaturityRating } from '../auditTemplates';
 import { useAuthStore } from '../store/authStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -299,7 +299,7 @@ export default function AuditsPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Avg Compliance</p>
-                <p className="text-3xl font-bold text-gray-900">{parseFloat(analytics.overall?.avg_compliance || 0).toFixed(1)}%</p>
+                <p className="text-3xl font-bold text-gray-900">{(analytics.overall?.avg_compliance || 0).toFixed(1)}%</p>
               </div>
             </div>
           </div>
@@ -311,7 +311,7 @@ export default function AuditsPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Avg Score</p>
-                <p className="text-3xl font-bold text-gray-900">{parseFloat(analytics.overall?.avg_score || 0).toFixed(1)}/200</p>
+                <p className="text-3xl font-bold text-gray-900">{(analytics.overall?.avg_score || 0).toFixed(1)}/200</p>
               </div>
             </div>
           </div>
@@ -567,7 +567,7 @@ export default function AuditsPage() {
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Select an audit template...</option>
-                {allAuditTemplates.map(template => (
+                {allAuditTemplates.map((template: any) => (
                   <option key={template.id} value={template.id}>
                     {template.template_name} ({template.questions.length} questions)
                   </option>
@@ -575,7 +575,7 @@ export default function AuditsPage() {
               </select>
               {newAudit.template_id && (
                 <p className="mt-2 text-sm text-gray-600">
-                  {allAuditTemplates.find(t => t.id === newAudit.template_id)?.description}
+                  {allAuditTemplates.find((t: any) => t.id === newAudit.template_id)?.description}
                 </p>
               )}
             </div>
@@ -613,8 +613,8 @@ export default function AuditsPage() {
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <h4 className="font-medium text-blue-900 mb-2">Template Overview</h4>
                 {allAuditTemplates
-                  .filter(t => t.id === newAudit.template_id)
-                  .map(template => (
+                  .filter((t: any) => t.id === newAudit.template_id)
+                  .map((template: any) => (
                     <div key={template.id} className="space-y-2">
                       <p className="text-sm text-blue-800">
                         <strong>Category:</strong> {template.category}
@@ -661,7 +661,7 @@ export default function AuditsPage() {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-gray-800">Available Audit Templates</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {allAuditTemplates.map(template => (
+            {allAuditTemplates.map((template: any) => (
               <div 
                 key={template.id} 
                 className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -714,7 +714,7 @@ export default function AuditsPage() {
           >
             📊 Analytics
           </button>
-          {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'auditor') && (
+          {(user?.role === 'admin' || user?.role === 'manager' || (user as any)?.role === 'auditor') && (
             <button
               onClick={() => setView('new')}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
@@ -754,7 +754,7 @@ export default function AuditsPage() {
             className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Templates</option>
-            {allAuditTemplates.map(t => (
+            {allAuditTemplates.map((t: any) => (
               <option key={t.id} value={t.id}>{t.template_name}</option>
             ))}
           </select>
@@ -788,7 +788,7 @@ export default function AuditsPage() {
                 : 'Start your first fleet audit to assess compliance and maturity'
               }
             </p>
-            {(user?.role === 'admin' || user?.role === 'manager' || user?.role === 'auditor') && (
+            {((user?.role === 'admin' || user?.role === 'manager' || (user as any)?.role === 'auditor')) && (
               <button
                 onClick={() => setView('new')}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
