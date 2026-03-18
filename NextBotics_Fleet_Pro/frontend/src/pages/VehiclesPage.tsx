@@ -25,10 +25,15 @@ export default function VehiclesPage() {
   const loadVehicles = async () => {
     try {
       setLoading(true);
+      console.log('Fetching vehicles...');
       const response = await api.getVehicles({ limit: 50 });
+      console.log('Vehicles response:', response);
       if (response.success) {
-        // Backend returns { items: [], total, page, perPage }
+        console.log('Vehicles data:', response.data);
+        console.log('Vehicles items:', response.data?.items);
         setVehicles(response.data?.items || []);
+      } else {
+        console.error('Vehicles API error:', response.error);
       }
     } catch (error) {
       console.error('Failed to load vehicles:', error);
