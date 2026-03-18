@@ -63,7 +63,7 @@ export default function CompanyUsersPage() {
     setSaving(true);
 
     try {
-      const res = await api.createUser(formData);
+      const res = await api.createUser({ ...formData, companyId });
       if (res.success) {
         setTempPassword(res.data?.tempPassword || '');
         setSuccess(`User ${formData.firstName} ${formData.lastName} created successfully!`);

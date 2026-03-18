@@ -53,6 +53,7 @@ export interface CreateUserData {
   lastName: string;
   phone?: string;
   role: UserRole;
+  companyId?: string;
 }
 
 export interface UpdateUserData {

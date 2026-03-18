@@ -152,6 +152,13 @@ router.post('/', [
             companyId = company.id;
             console.log('[DEBUG] Found company, using ID:', companyId);
         }
+        // If still super_admin (no company specified), return error
+        if (companyId === 'super_admin') {
+            return res.status(400).json({
+                success: false,
+                error: 'Super admins must specify a companyId or companySlug when creating users'
+            });
+        }
         console.log('[DEBUG] Final companyId:', companyId);
         // Managers can only create staff, not other managers or admins
         if (requesterRole === 'manager' && req.body.role !== 'staff') {
