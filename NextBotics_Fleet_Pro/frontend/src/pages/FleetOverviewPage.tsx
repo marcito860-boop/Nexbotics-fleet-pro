@@ -6,18 +6,19 @@ import {
 
 interface Vehicle {
   id: string;
-  registration_num: string;
-  make_model?: string;
-  year_of_manufacture?: number;
-  ownership: string;
+  registrationNumber: string;
+  make: string;
+  model: string;
+  year: number;
+  ownership?: string;
   department?: string;
-  branch?: string;
-  status: 'Active' | 'Under Maintenance' | 'Retired' | 'Inactive';
-  current_mileage: number;
+  status: string;
+  currentMileage?: number;
+  mileage?: number;
   next_service_due?: string;
   last_service_date?: string;
-  target_consumption_rate?: number;
-  created_at: string;
+  created_at?: string;
+  createdAt?: string;
 }
 
 interface FleetMetrics {
@@ -44,6 +45,11 @@ interface UtilizationData {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899'];
 const STATUS_COLORS = {
+  'available': 'bg-green-100 text-green-800',
+  'assigned': 'bg-amber-100 text-amber-800',
+  'on_trip': 'bg-blue-100 text-blue-800',
+  'maintenance': 'bg-red-100 text-red-800',
+  'retired': 'bg-gray-100 text-gray-800',
   'Active': 'bg-green-100 text-green-800',
   'Under Maintenance': 'bg-amber-100 text-amber-800',
   'Retired': 'bg-gray-100 text-gray-800',
@@ -70,11 +76,13 @@ export default function FleetOverviewPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE_URL}/vehicles`, {
+      const res = await fetch(`${API_BASE_URL}/api/fleet/vehicles`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch vehicles');
-      const data = await res.json();
+      const result = await res.json();
+      // Backend returns { data: { items: [...] } }
+      const data = result.data?.items || result.data || [];
       setVehicles(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Failed to load fleet data');
@@ -89,7 +97,7 @@ export default function FleetOverviewPage() {
     const activeVehicles = vehicles.filter(v => v.status === 'Active').length;
     const maintenanceVehicles = vehicles.filter(v => v.status === 'Under Maintenance').length;
     const retiredVehicles = vehicles.filter(v => v.status === 'Retired').length;
-    const totalMileage = vehicles.reduce((sum, v) => sum + (v.current_mileage || 0), 0);
+    const totalMileage = vehicles.reduce((sum, v) => sum + (v.currentMileage || v.mileage || 0), 0);
     const avgMileage = totalVehicles > 0 ? totalMileage / totalVehicles : 0;
 
     const byDepartment = vehicles.reduce((acc, v) => {
@@ -120,7 +128,7 @@ export default function FleetOverviewPage() {
 
     // High mileage vehicles (top 10)
     const highMileage = [...vehicles]
-      .sort((a, b) => (b.current_mileage || 0) - (a.current_mileage || 0))
+      .sort((a, b) => (b.currentMileage || b.mileage || 0) - (a.currentMileage || a.mileage || 0))
       .slice(0, 10);
 
     return {
@@ -173,7 +181,7 @@ export default function FleetOverviewPage() {
     ];
     
     vehicles.forEach(v => {
-      const mileage = v.current_mileage || 0;
+      const mileage = v.currentMileage || v.mileage || 0;
       const range = ranges.find(r => mileage >= r.min && mileage < r.max);
       if (range) range.count++;
     });
@@ -440,15 +448,15 @@ export default function FleetOverviewPage() {
                       ) : (
                         filteredVehicles.map(v => (
                           <tr key={v.id} className="border-t hover:bg-slate-50">
-                            <td className="p-3 font-medium">{v.registration_num}</td>
-                            <td className="p-3">{v.make_model || '-'}</td>
+                            <td className="p-3 font-medium">{v.registrationNumber}</td>
+                            <td className="p-3">{v.make} {v.model}</td>
                             <td className="p-3">{v.department || '-'}</td>
                             <td className="p-3">
                               <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[v.status] || 'bg-gray-100'}`}>
                                 {v.status}
                               </span>
                             </td>
-                            <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
+                            <td className="p-3">{(v.currentMileage || v.mileage || 0).toLocaleString()} km</td>
                             <td className="p-3">{v.ownership}</td>
                           </tr>
                         ))
@@ -554,7 +562,7 @@ export default function FleetOverviewPage() {
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                   <h4 className="font-medium text-slate-900">High Mileage (150k+)</h4>
                   <p className="text-3xl font-bold text-slate-700 mt-2">
-                    {vehicles.filter(v => (v.current_mileage || 0) >= 150000).length}
+                    {vehicles.filter(v => (v.currentMileage || v.mileage || 0) >= 150000).length}
                   </p>
                   <p className="text-sm text-slate-600">Consider replacement</p>
                 </div>
@@ -589,9 +597,9 @@ export default function FleetOverviewPage() {
                           const isOverdue = v.next_service_due && new Date(v.next_service_due) < new Date();
                           return (
                             <tr key={v.id} className="border-t hover:bg-slate-50">
-                              <td className="p-3 font-medium">{v.registration_num}</td>
-                              <td className="p-3">{v.make_model || '-'}</td>
-                              <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
+                              <td className="p-3 font-medium">{v.registrationNumber}</td>
+                              <td className="p-3">{v.make} {v.model}</td>
+                              <td className="p-3">{(v.currentMileage || v.mileage || 0).toLocaleString()} km</td>
                               <td className="p-3">{v.last_service_date ? new Date(v.last_service_date).toLocaleDateString() : '-'}</td>
                               <td className="p-3">{v.next_service_due}</td>
                               <td className="p-3">
@@ -629,10 +637,10 @@ export default function FleetOverviewPage() {
                     <tbody>
                       {metrics.highMileage.map(v => (
                         <tr key={v.id} className="border-t hover:bg-slate-50">
-                          <td className="p-3 font-medium">{v.registration_num}</td>
-                          <td className="p-3">{v.make_model || '-'}</td>
-                          <td className="p-3">{v.year_of_manufacture || '-'}</td>
-                          <td className="p-3">{v.current_mileage?.toLocaleString()} km</td>
+                          <td className="p-3 font-medium">{v.registrationNumber}</td>
+                          <td className="p-3">{v.make} {v.model}</td>
+                          <td className="p-3">{v.year || '-'}</td>
+                          <td className="p-3">{(v.currentMileage || v.mileage || 0).toLocaleString()} km</td>
                           <td className="p-3">
                             <span className={`px-2 py-1 rounded text-xs ${STATUS_COLORS[v.status] || 'bg-gray-100'}`}>
                               {v.status}
