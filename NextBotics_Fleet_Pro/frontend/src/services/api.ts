@@ -5,7 +5,9 @@ import {
   Requisition, Course, QuizAttempt, Certificate, AuditTemplate, AuditSession,
   Risk, InventoryItem, InventoryCategory, Invoice, DashboardAnalytics,
   FleetUtilization, Document, Supplier, SupplierContract, PlannedRoute,
-  StockAlert
+  StockAlert,
+  ServiceProvider, SparePart, MaintenanceSchedule, MaintenanceRecord, 
+  VehicleDowntime, MaintenanceReminder
 } from '../types/fleet';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -613,6 +615,201 @@ class ApiService {
   async getRouteAnalytics(dateFrom?: string, dateTo?: string): Promise<ApiResponse<any>> {
     const response = await this.client.get('/fleet/routes/analytics', { params: { dateFrom, dateTo } });
     return response.data;
+  }
+
+  // ==================== MAINTENANCE API ====================
+
+  // Maintenance Overview
+  async getMaintenanceOverview(): Promise<ApiResponse<any>> {
+    const response = await this.client.get('/fleet/maintenance/overview');
+    return response.data;
+  }
+
+  // Service Providers
+  async getServiceProviders(params?: { page?: number; perPage?: number; type?: string; search?: string }): Promise<ApiResponse<{ items: ServiceProvider[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/providers', { params });
+    return response.data;
+  }
+
+  async getServiceProvider(id: string): Promise<ApiResponse<ServiceProvider>> {
+    const response = await this.client.get(`/fleet/maintenance/providers/${id}`);
+    return response.data;
+  }
+
+  async createServiceProvider(data: Partial<ServiceProvider>): Promise<ApiResponse<ServiceProvider>> {
+    const response = await this.client.post('/fleet/maintenance/providers', data);
+    return response.data;
+  }
+
+  async updateServiceProvider(id: string, data: Partial<ServiceProvider>): Promise<ApiResponse<ServiceProvider>> {
+    const response = await this.client.put(`/fleet/maintenance/providers/${id}`, data);
+    return response.data;
+  }
+
+  async deleteServiceProvider(id: string): Promise<ApiResponse> {
+    const response = await this.client.delete(`/fleet/maintenance/providers/${id}`);
+    return response.data;
+  }
+
+  // Spare Parts
+  async getSpareParts(params?: { page?: number; perPage?: number; category?: string; lowStockOnly?: boolean; search?: string }): Promise<ApiResponse<{ items: SparePart[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/parts', { params });
+    return response.data;
+  }
+
+  async getLowStockParts(): Promise<ApiResponse<{ items: SparePart[]; total: number }>> {
+    const response = await this.client.get('/fleet/maintenance/parts/low-stock');
+    return response.data;
+  }
+
+  async createSparePart(data: Partial<SparePart>): Promise<ApiResponse<SparePart>> {
+    const response = await this.client.post('/fleet/maintenance/parts', data);
+    return response.data;
+  }
+
+  async updateSparePart(id: string, data: Partial<SparePart>): Promise<ApiResponse<SparePart>> {
+    const response = await this.client.put(`/fleet/maintenance/parts/${id}`, data);
+    return response.data;
+  }
+
+  async adjustPartStock(id: string, quantity: number, reason?: string): Promise<ApiResponse<SparePart>> {
+    const response = await this.client.post(`/fleet/maintenance/parts/${id}/adjust-stock`, { quantity, reason });
+    return response.data;
+  }
+
+  async deleteSparePart(id: string): Promise<ApiResponse> {
+    const response = await this.client.delete(`/fleet/maintenance/parts/${id}`);
+    return response.data;
+  }
+
+  // Maintenance Schedules
+  async getMaintenanceSchedules(params?: { page?: number; perPage?: number; vehicleId?: string; status?: string; upcoming?: boolean; overdue?: boolean }): Promise<ApiResponse<{ items: MaintenanceSchedule[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/schedules', { params });
+    return response.data;
+  }
+
+  async getMaintenanceScheduleStats(): Promise<ApiResponse<{ total: number; active: number; overdue: number; dueSoon: number }>> {
+    const response = await this.client.get('/fleet/maintenance/schedules/stats');
+    return response.data;
+  }
+
+  async getMaintenanceSchedule(id: string): Promise<ApiResponse<MaintenanceSchedule>> {
+    const response = await this.client.get(`/fleet/maintenance/schedules/${id}`);
+    return response.data;
+  }
+
+  async createMaintenanceSchedule(data: Partial<MaintenanceSchedule>): Promise<ApiResponse<MaintenanceSchedule>> {
+    const response = await this.client.post('/fleet/maintenance/schedules', data);
+    return response.data;
+  }
+
+  async updateMaintenanceSchedule(id: string, data: Partial<MaintenanceSchedule>): Promise<ApiResponse<MaintenanceSchedule>> {
+    const response = await this.client.put(`/fleet/maintenance/schedules/${id}`, data);
+    return response.data;
+  }
+
+  async deleteMaintenanceSchedule(id: string): Promise<ApiResponse> {
+    const response = await this.client.delete(`/fleet/maintenance/schedules/${id}`);
+    return response.data;
+  }
+
+  // Maintenance Records
+  async getMaintenanceRecords(params?: { page?: number; perPage?: number; vehicleId?: string; status?: string; serviceType?: string; category?: string }): Promise<ApiResponse<{ items: MaintenanceRecord[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/records', { params });
+    return response.data;
+  }
+
+  async getMaintenanceRecordStats(dateFrom?: string, dateTo?: string): Promise<ApiResponse<any>> {
+    const response = await this.client.get('/fleet/maintenance/records/stats', { params: { dateFrom, dateTo } });
+    return response.data;
+  }
+
+  async getMaintenanceRecord(id: string): Promise<ApiResponse<MaintenanceRecord>> {
+    const response = await this.client.get(`/fleet/maintenance/records/${id}`);
+    return response.data;
+  }
+
+  async createMaintenanceRecord(data: Partial<MaintenanceRecord>): Promise<ApiResponse<MaintenanceRecord>> {
+    const response = await this.client.post('/fleet/maintenance/records', data);
+    return response.data;
+  }
+
+  async updateMaintenanceRecord(id: string, data: Partial<MaintenanceRecord>): Promise<ApiResponse<MaintenanceRecord>> {
+    const response = await this.client.put(`/fleet/maintenance/records/${id}`, data);
+    return response.data;
+  }
+
+  async deleteMaintenanceRecord(id: string): Promise<ApiResponse> {
+    const response = await this.client.delete(`/fleet/maintenance/records/${id}`);
+    return response.data;
+  }
+
+  // Vehicle Downtime
+  async getVehicleDowntime(params?: { page?: number; perPage?: number; vehicleId?: string; active?: boolean }): Promise<ApiResponse<{ items: VehicleDowntime[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/downtime', { params });
+    return response.data;
+  }
+
+  async getDowntimeStats(): Promise<ApiResponse<any>> {
+    const response = await this.client.get('/fleet/maintenance/downtime/stats');
+    return response.data;
+  }
+
+  async createDowntimeRecord(data: Partial<VehicleDowntime>): Promise<ApiResponse<VehicleDowntime>> {
+    const response = await this.client.post('/fleet/maintenance/downtime', data);
+    return response.data;
+  }
+
+  async endDowntime(id: string, endDate: string, endTime?: string, durationHours?: number): Promise<ApiResponse<VehicleDowntime>> {
+    const response = await this.client.post(`/fleet/maintenance/downtime/${id}/end`, { endDate, endTime, durationHours });
+    return response.data;
+  }
+
+  // Maintenance Reminders
+  async getMaintenanceReminders(params?: { page?: number; perPage?: number; status?: string; severity?: string; vehicleId?: string }): Promise<ApiResponse<{ items: MaintenanceReminder[]; total: number; page?: number; perPage?: number; totalPages?: number }>> {
+    const response = await this.client.get('/fleet/maintenance/reminders', { params });
+    return response.data;
+  }
+
+  async getMaintenanceReminderStats(): Promise<ApiResponse<{ total: number; pending: number; acknowledged: number; critical: number; warning: number }>> {
+    const response = await this.client.get('/fleet/maintenance/reminders/stats');
+    return response.data;
+  }
+
+  async generateMaintenanceReminders(): Promise<ApiResponse<{ generated: number }>> {
+    const response = await this.client.post('/fleet/maintenance/reminders/generate');
+    return response.data;
+  }
+
+  async acknowledgeMaintenanceReminder(id: string): Promise<ApiResponse<MaintenanceReminder>> {
+    const response = await this.client.post(`/fleet/maintenance/reminders/${id}/acknowledge`);
+    return response.data;
+  }
+
+  async dismissMaintenanceReminder(id: string): Promise<ApiResponse<MaintenanceReminder>> {
+    const response = await this.client.post(`/fleet/maintenance/reminders/${id}/dismiss`);
+    return response.data;
+  }
+
+  // Generic HTTP methods for flexibility
+  async get<T = any>(url: string, config?: any): Promise<{ data: T }> {
+    const response = await this.client.get(url, config);
+    return response;
+  }
+
+  async post<T = any>(url: string, data?: any, config?: any): Promise<{ data: T }> {
+    const response = await this.client.post(url, data, config);
+    return response;
+  }
+
+  async put<T = any>(url: string, data?: any, config?: any): Promise<{ data: T }> {
+    const response = await this.client.put(url, data, config);
+    return response;
+  }
+
+  async delete<T = any>(url: string, config?: any): Promise<{ data: T }> {
+    const response = await this.client.delete(url, config);
+    return response;
   }
 }
 

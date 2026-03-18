@@ -17,8 +17,10 @@ import AssignmentsPage from './pages/AssignmentsPage';
 import FleetOverviewPage from './pages/FleetOverviewPage';
 import AlertsPage from './pages/AlertsPage';
 import MaintenancePage from './pages/MaintenancePage';
+import IntegrationsPage from './pages/IntegrationsPage';
+import SettingsPage from './pages/SettingsPage';
 import {
-  AuditsPage, TrainingPage, RisksPage, SettingsPage
+  AuditsPage, TrainingPage, RisksPage
 } from './pages/PlaceholderPages';
 
 // Protected route component
@@ -235,6 +237,15 @@ function App() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/integrations"
+        element={
+          <ProtectedRoute requireManager>
+            <IntegrationsPage />
           </ProtectedRoute>
         }
       />

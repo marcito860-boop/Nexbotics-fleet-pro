@@ -1,4 +1,11 @@
 import { query } from '../database';
+import { PoolClient } from 'pg';
+
+// Get pool for transactions
+const getPool = async () => {
+  const { pool } = await import('../database');
+  return pool;
+};
 
 export type ServiceType = 'preventive' | 'repair' | 'breakdown' | 'emergency';
 export type MaintenanceStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';

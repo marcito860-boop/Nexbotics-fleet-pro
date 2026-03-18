@@ -100,6 +100,13 @@ app.use('/api/fleet/documents', documentRoutes);
 app.use('/api/fleet/routes', routePlanningRoutes);
 app.use('/api/fleet/maintenance', maintenanceRoutes);
 
+// Integrations and Settings routes
+import integrationProvidersRoutes from './routes/integration-providers';
+import settingsRoutes from './routes/settings';
+app.use('/api/fleet/integration-providers', integrationProvidersRoutes);
+app.use('/api/companies/settings', settingsRoutes);
+app.use('/api/users/preferences', settingsRoutes);
+
 // Demo data seeder (no auth required)
 import seedDemoRoutes from './routes/seed-demo';
 app.use('/api', seedDemoRoutes);

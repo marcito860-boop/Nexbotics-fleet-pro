@@ -1,11 +1,11 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Wrench, Calendar, AlertTriangle, Clock, Package, Building2,
-  Plus, Search, Filter, ChevronLeft, ChevronRight, MoreVertical,
-  CheckCircle, AlertCircle, XCircle, TrendingUp, DollarSign,
-  Car, MapPin, Phone, Mail, Star, Edit2, Trash2, X,
-  Settings, History, Bell, Activity
+  Plus, Search, ChevronLeft, ChevronRight,
+  AlertCircle, DollarSign,
+  Car, MapPin, Phone, Mail, Star, Edit2, Trash2,
+  History, Bell, Activity
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
@@ -150,7 +150,7 @@ export default function MaintenancePage() {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [parts, setParts] = useState<SparePart[]>([]);
-  const [reminders, setReminders] = useState<MaintenanceReminder[]>([]);
+  const [_reminders, setReminders] = useState<MaintenanceReminder[]>([]);
   const [downtime, setDowntime] = useState<VehicleDowntime[]>([]);
   
   // Loading states
@@ -158,10 +158,10 @@ export default function MaintenancePage() {
   const [loadingTab, setLoadingTab] = useState(false);
   
   // Modal states
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [showRecordModal, setShowRecordModal] = useState(false);
-  const [showProviderModal, setShowProviderModal] = useState(false);
-  const [showPartModal, setShowPartModal] = useState(false);
+  const [_showScheduleModal, setShowScheduleModal] = useState(false);
+  const [_showRecordModal, _setShowRecordModal] = useState(false);
+  const [_showProviderModal, setShowProviderModal] = useState(false);
+  const [_showPartModal, setShowPartModal] = useState(false);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
