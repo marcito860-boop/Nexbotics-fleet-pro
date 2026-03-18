@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { query } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth';
-import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { allAuditTemplates, getMaturityRating } from '../auditTemplates';
 
 const router = Router();
 

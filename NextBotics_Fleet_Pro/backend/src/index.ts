@@ -104,8 +104,7 @@ app.use('/api/fleet/maintenance', maintenanceRoutes);
 import integrationProvidersRoutes from './routes/integration-providers';
 import settingsRoutes from './routes/settings';
 app.use('/api/fleet/integration-providers', integrationProvidersRoutes);
-app.use('/api/companies/settings', settingsRoutes);
-app.use('/api/users/preferences', settingsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Demo data seeder (no auth required)
 import seedDemoRoutes from './routes/seed-demo';
