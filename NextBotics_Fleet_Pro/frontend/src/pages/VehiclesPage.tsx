@@ -152,7 +152,7 @@ export default function VehiclesPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {(vehicle.currentMileage || vehicle.mileage || 0).toLocaleString()} km
+                          {(vehicle.mileage || 0).toLocaleString()} km
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
