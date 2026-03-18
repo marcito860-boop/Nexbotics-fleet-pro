@@ -132,8 +132,21 @@ router.post('/', [
         });
     }
     try {
-        const companyId = req.user.companyId;
+        let companyId = req.user.companyId;
         const requesterRole = req.user.role;
+        const userType = req.user.type;
+        // Super admins can specify a companyId to create users in any company
+        if (userType === 'super_admin' && req.body.companyId) {
+            companyId = req.body.companyId;
+        }
+        // Super admins can also specify companySlug to find the company
+        if (userType === 'super_admin' && req.body.companySlug) {
+            const company = await Company_1.CompanyModel.findBySlug(req.body.companySlug);
+            if (!company) {
+                return res.status(404).json({ success: false, error: 'Company not found' });
+            }
+            companyId = company.id;
+        }
         // Managers can only create staff, not other managers or admins
         if (requesterRole === 'manager' && req.body.role !== 'staff') {
             return res.status(403).json({
