@@ -4,11 +4,9 @@ import {
   PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { useAuthStore } from '../store/authStore';
 
-interface AuditsPageProps {
-  apiUrl: string;
-  user: any;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface AuditSession {
   id: string;
@@ -74,7 +72,8 @@ const MATURITY_COLORS: Record<string, string> = {
   'High Risk': '#7C3AED'
 };
 
-export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
+export default function AuditsPage() {
+  const { user } = useAuthStore();
   const [view, setView] = useState<'list' | 'new' | 'analytics'>('list');
   const [sessions, setSessions] = useState<AuditSession[]>([]);
   const [analytics, setAnalytics] = useState<AuditAnalytics | null>(null);
@@ -107,7 +106,7 @@ export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
       if (statusFilter) params.append('status', statusFilter);
       if (templateFilter) params.append('template_id', templateFilter);
       
-      const res = await fetch(`${apiUrl}/audits/sessions?${params.toString()}`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -123,7 +122,7 @@ export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${apiUrl}/audits/analytics/dashboard`, {
+      const res = await fetch(`${API_BASE_URL}/audits/analytics/dashboard`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch analytics');
@@ -142,7 +141,7 @@ export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
 
     setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -166,7 +165,7 @@ export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
     if (!confirm('Are you sure you want to delete this audit? This action cannot be undone.')) return;
     
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -180,7 +179,7 @@ export default function AuditsPage({ apiUrl, user }: AuditsPageProps) {
 
   const exportPDF = async (id: string) => {
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}/pdf`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}/pdf`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       

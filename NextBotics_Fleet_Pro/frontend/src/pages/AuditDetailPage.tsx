@@ -5,11 +5,9 @@ import {
   PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 import { allAuditTemplates, getMaturityRating } from '../../../shared/auditTemplates';
+import { useAuthStore } from '../store/authStore';
 
-interface AuditDetailPageProps {
-  apiUrl: string;
-  user: any;
-}
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface AuditSession {
   id: string;
@@ -70,7 +68,8 @@ const RISK_COLORS: Record<string, string> = {
   'Critical': '#7C3AED'
 };
 
-export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) {
+export default function AuditDetailPage() {
+  const { user } = useAuthStore();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [session, setSession] = useState<AuditSession | null>(null);
@@ -98,7 +97,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
     if (!id) return;
     setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -117,7 +116,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
     } finally {
       setLoading(false);
     }
-  }, [id, apiUrl, token]);
+  }, [id, API_BASE_URL, token]);
 
   useEffect(() => {
     fetchAuditData();
@@ -125,7 +124,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
 
   const updateResponse = async (responseId: string, score: number, notes: string) => {
     try {
-      const res = await fetch(`${apiUrl}/audits/responses/${responseId}`, {
+      const res = await fetch(`${API_BASE_URL}/audits/responses/${responseId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +155,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
 
     setSaving(true);
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}/complete`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}/complete`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -184,7 +183,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
     }
 
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}/corrective-actions`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}/corrective-actions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -212,7 +211,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
 
   const updateActionStatus = async (actionId: string, status: string, completionNotes: string = '') => {
     try {
-      const res = await fetch(`${apiUrl}/audits/corrective-actions/${actionId}`, {
+      const res = await fetch(`${API_BASE_URL}/audits/corrective-actions/${actionId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -231,7 +230,7 @@ export default function AuditDetailPage({ apiUrl, user }: AuditDetailPageProps) 
   const exportPDF = async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${apiUrl}/audits/sessions/${id}/pdf`, {
+      const res = await fetch(`${API_BASE_URL}/audits/sessions/${id}/pdf`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       

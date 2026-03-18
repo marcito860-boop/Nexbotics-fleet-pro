@@ -18,9 +18,11 @@ import FleetOverviewPage from './pages/FleetOverviewPage';
 import AlertsPage from './pages/AlertsPage';
 import MaintenancePage from './pages/MaintenancePage';
 import IntegrationsPage from './pages/IntegrationsPage';
+import AuditsPage from './pages/AuditsPage';
+import AuditDetailPage from './pages/AuditDetailPage';
 import SettingsPage from './pages/SettingsPage';
 import {
-  AuditsPage, TrainingPage, RisksPage
+  TrainingPage, RisksPage
 } from './pages/PlaceholderPages';
 
 // Protected route component
@@ -174,6 +176,15 @@ function App() {
         element={
           <ProtectedRoute>
             <AuditsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/audits/:id"
+        element={
+          <ProtectedRoute>
+            <AuditDetailPage />
           </ProtectedRoute>
         }
       />
