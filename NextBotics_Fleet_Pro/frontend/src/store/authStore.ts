@@ -5,7 +5,7 @@ import { api } from '../services/api';
 
 interface AuthStore extends AuthState {
   // Actions
-  setAuth: (token: string, user: User, company?: Company) => void;
+  setAuth: (token: string, user: User, company?: Company, type?: 'user' | 'super_admin') => void;
   clearAuth: () => void;
   updateUser: (user: User) => void;
   updateCompany: (company: Company) => void;
@@ -23,8 +23,9 @@ export const useAuthStore = create<AuthStore>()(
       company: null,
       isAuthenticated: false,
 
-      setAuth: (token, user, company) => {
-        set({ token, user, company, isAuthenticated: true });
+      setAuth: (token, user, company, type = 'user') => {
+        const userWithType = { ...user, type };
+        set({ token, user: userWithType, company, isAuthenticated: true });
       },
 
       clearAuth: () => {
@@ -50,8 +51,13 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const response = await api.getMe();
           if (response.success && response.data) {
+            // Merge type into user object for super admin detection
+            const userWithType = {
+              ...response.data.user,
+              type: response.data.type || 'user'
+            };
             set({
-              user: response.data.user,
+              user: userWithType,
               company: response.data.company || null,
               token,
               isAuthenticated: true,

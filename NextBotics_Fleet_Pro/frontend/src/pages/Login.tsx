@@ -42,7 +42,13 @@ export default function Login() {
       });
 
       if (response.success && response.data) {
-        setAuth(response.data.token, response.data.user, response.data.company);
+        // Get full user info including type
+        const meResponse = await api.getMe();
+        const userWithType = meResponse.success && meResponse.data 
+          ? { ...response.data.user, type: meResponse.data.type || 'user' }
+          : response.data.user;
+        
+        setAuth(response.data.token, userWithType, response.data.company);
         
         // If must change password, redirect to change password page
         if (response.data.user.mustChangePassword) {
