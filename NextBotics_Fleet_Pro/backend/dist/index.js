@@ -96,8 +96,10 @@ app.use('/api/fleet/maintenance', maintenance_1.default);
 // Integrations and Settings routes
 const integration_providers_1 = __importDefault(require("./routes/integration-providers"));
 const settings_1 = __importDefault(require("./routes/settings"));
+const admin_1 = __importDefault(require("./routes/admin"));
 app.use('/api/fleet/integration-providers', integration_providers_1.default);
 app.use('/api/settings', settings_1.default);
+app.use('/api/admin', admin_1.default);
 // Demo data seeder (no auth required)
 const seed_demo_1 = __importDefault(require("./routes/seed-demo"));
 app.use('/api', seed_demo_1.default);

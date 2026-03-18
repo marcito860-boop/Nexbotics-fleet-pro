@@ -103,8 +103,10 @@ app.use('/api/fleet/maintenance', maintenanceRoutes);
 // Integrations and Settings routes
 import integrationProvidersRoutes from './routes/integration-providers';
 import settingsRoutes from './routes/settings';
+import adminRoutes from './routes/admin';
 app.use('/api/fleet/integration-providers', integrationProvidersRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Demo data seeder (no auth required)
 import seedDemoRoutes from './routes/seed-demo';
