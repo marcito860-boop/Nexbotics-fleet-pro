@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
-import { Requisition, Vehicle } from '../types/fleet';
+import { Requisition } from '../types/fleet';
 import DashboardLayout from '../components/Layout';
 
 interface RequisitionFormData {
@@ -20,7 +20,6 @@ export default function RequisitionsPage() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuthStore();
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [showModal, setShowModal] = useState(false);
@@ -43,9 +42,6 @@ export default function RequisitionsPage() {
       return;
     }
     loadRequisitions();
-    if (isManager) {
-      loadVehicles();
-    }
   }, [isAuthenticated, navigate, activeTab]);
 
   const loadRequisitions = async () => {
@@ -66,17 +62,6 @@ export default function RequisitionsPage() {
       console.error('Failed to load requisitions:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadVehicles = async () => {
-    try {
-      const response = await api.getVehicles({ limit: 100 });
-      if (response.success) {
-        setVehicles(response.data?.items || []);
-      }
-    } catch (error) {
-      console.error('Failed to load vehicles:', error);
     }
   };
 

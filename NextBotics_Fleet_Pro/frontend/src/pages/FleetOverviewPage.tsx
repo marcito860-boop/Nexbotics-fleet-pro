@@ -44,7 +44,7 @@ interface UtilizationData {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#EF4444', '#8B5CF6', '#EC4899'];
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, string> = {
   'available': 'bg-green-100 text-green-800',
   'assigned': 'bg-amber-100 text-amber-800',
   'on_trip': 'bg-blue-100 text-blue-800',

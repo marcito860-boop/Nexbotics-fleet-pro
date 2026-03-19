@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Users, Building2, Settings, Shield, Car, UserCircle, AlertTriangle,
-  ChevronRight, User as UserIcon, Fuel, Wrench, GraduationCap 
+  Users, Building2, Settings, Car, UserCircle, AlertTriangle,
+  ChevronRight, GraduationCap 
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
@@ -39,7 +39,7 @@ export default function Dashboard() {
         vehicles: vehiclesRes.data?.total || 0,
         drivers: driversRes.data?.total || driversRes.data?.items?.length || 0,
         alerts: alertsRes.data?.total || alertsRes.data?.items?.length || 0,
-        training: trainingRes.data?.total || trainingRes.data?.items?.length || trainingRes.data?.length || 0,
+        training: trainingRes.data?.total || trainingRes.data?.courses?.length || 0,
       });
     } catch (error) {
       console.error('Failed to fetch fleet stats:', error);
