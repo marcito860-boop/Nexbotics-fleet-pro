@@ -342,22 +342,15 @@ function CompanySettingsTab({ API_BASE_URL, token, onSave, saving, setSaving }: 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/settings/company`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      });
+      const res = await api.updateSettings('company', settings);
       
-      if (res.ok) {
+      if (res.success) {
         onSave('success', 'Company settings saved successfully');
       } else {
-        onSave('error', 'Failed to save settings');
+        onSave('error', res.error || 'Failed to save settings');
       }
-    } catch (err) {
-      onSave('error', 'Error saving settings');
+    } catch (err: any) {
+      onSave('error', err.message || 'Error saving settings');
     } finally {
       setSaving(false);
     }
@@ -703,22 +696,15 @@ function FleetSettingsTab({ API_BASE_URL, token, onSave, saving, setSaving }: {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/settings/fleet`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      });
+      const res = await api.updateSettings('fleet', settings);
       
-      if (res.ok) {
+      if (res.success) {
         onSave('success', 'Fleet settings saved successfully');
       } else {
-        onSave('error', 'Failed to save fleet settings');
+        onSave('error', res.error || 'Failed to save fleet settings');
       }
-    } catch (err) {
-      onSave('error', 'Error saving fleet settings');
+    } catch (err: any) {
+      onSave('error', err.message || 'Error saving fleet settings');
     } finally {
       setSaving(false);
     }
@@ -1041,22 +1027,15 @@ function NotificationsTab({ API_BASE_URL, token, onSave, saving, setSaving }: {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/settings/notifications`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      });
+      const res = await api.updateSettings('notifications', settings);
       
-      if (res.ok) {
+      if (res.success) {
         onSave('success', 'Notification settings saved');
       } else {
-        onSave('error', 'Failed to save settings');
+        onSave('error', res.error || 'Failed to save notification settings');
       }
-    } catch (err) {
-      onSave('error', 'Error saving settings');
+    } catch (err: any) {
+      onSave('error', err.message || 'Error saving notification settings');
     } finally {
       setSaving(false);
     }
@@ -1500,22 +1479,15 @@ function UserPreferencesTab({ API_BASE_URL, token, onSave, saving, setSaving }: 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/settings/user-preferences`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(preferences)
-      });
+      const res = await api.updateSettings('user-preferences', preferences);
       
-      if (res.ok) {
+      if (res.success) {
         onSave('success', 'Preferences saved successfully');
       } else {
-        onSave('error', 'Failed to save preferences');
+        onSave('error', res.error || 'Failed to save preferences');
       }
-    } catch (err) {
-      onSave('error', 'Error saving preferences');
+    } catch (err: any) {
+      onSave('error', err.message || 'Error saving preferences');
     } finally {
       setSaving(false);
     }
@@ -1856,22 +1828,15 @@ function SecuritySettingsTab({ API_BASE_URL, token, onSave, saving, setSaving }:
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/settings/security`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      });
+      const res = await api.updateSettings('security', settings);
       
-      if (res.ok) {
+      if (res.success) {
         onSave('success', 'Security settings saved');
       } else {
-        onSave('error', 'Failed to save security settings');
+        onSave('error', res.error || 'Failed to save security settings');
       }
-    } catch (err) {
-      onSave('error', 'Error saving security settings');
+    } catch (err: any) {
+      onSave('error', err.message || 'Error saving security settings');
     } finally {
       setSaving(false);
     }
