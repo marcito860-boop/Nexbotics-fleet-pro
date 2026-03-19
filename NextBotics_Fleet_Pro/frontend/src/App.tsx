@@ -20,12 +20,11 @@ import MaintenancePage from './pages/MaintenancePage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import AuditsPage from './pages/AuditsPage';
 import AuditDetailPage from './pages/AuditDetailPage';
+import TrainingPage from './pages/TrainingPage';
+import RisksPage from './pages/RisksPage';
 import SettingsPage from './pages/SettingsPage';
 import CompaniesPage from './pages/CompaniesPage';
 import CompanyUsersPage from './pages/CompanyUsersPage';
-import {
-  TrainingPage, RisksPage
-} from './pages/PlaceholderPages';
 
 // Protected route component
 function ProtectedRoute({ children, requireManager = false }: { children: React.ReactNode; requireManager?: boolean }) {
