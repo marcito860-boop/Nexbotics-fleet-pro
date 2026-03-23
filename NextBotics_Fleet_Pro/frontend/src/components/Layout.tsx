@@ -4,7 +4,8 @@ import {
   LayoutDashboard, Car, Users, ClipboardList, Route,
   Fuel, FileText, GraduationCap, ClipboardCheck, ShieldAlert,
   Package, Receipt, BarChart3, Settings, LogOut, Menu, X,
-  Bell, ChevronDown, Zap, Tv, Wrench, Plug, Building2
+  Bell, ChevronDown, Zap, Tv, Wrench, Plug, Building2,
+  FolderOpen, PieChart, Map
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { clsx, type ClassValue } from 'clsx';
@@ -47,6 +48,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Drivers', href: '/drivers', icon: Users },
     { name: 'Assignments', href: '/assignments', icon: ClipboardList },
     { name: 'Trips', href: '/trips', icon: Route },
+    { name: 'Route Planning', href: '/routes', icon: Map },
     { name: 'Fuel', href: '/fuel', icon: Fuel, roles: ['admin', 'manager'] },
     { name: 'Requisitions', href: '/requisitions', icon: FileText },
     { name: 'Training', href: '/training', icon: GraduationCap },
@@ -54,8 +56,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Risk Management', href: '/risks', icon: ShieldAlert, roles: ['admin', 'manager'] },
     { name: 'Maintenance', href: '/maintenance', icon: Wrench, roles: ['admin', 'manager'] },
     { name: 'Inventory', href: '/inventory', icon: Package },
+    { name: 'Documents', href: '/documents', icon: FolderOpen },
     { name: 'Invoices', href: '/invoices', icon: Receipt, roles: ['admin', 'manager'] },
     { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+    { name: 'Reports', href: '/reports', icon: PieChart, roles: ['admin', 'manager'] },
     { name: 'Integrations', href: '/integrations', icon: Plug, roles: ['admin', 'manager'] },
     { name: 'Live TV', href: '/tv', icon: Tv },
   ];

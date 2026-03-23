@@ -25,6 +25,9 @@ import RisksPage from './pages/RisksPage';
 import SettingsPage from './pages/SettingsPage';
 import CompaniesPage from './pages/CompaniesPage';
 import CompanyUsersPage from './pages/CompanyUsersPage';
+import DocumentsPage from './pages/DocumentsPage';
+import ReportsPage from './pages/ReportsPage';
+import RoutePlanningPage from './pages/RoutePlanningPage';
 
 // Protected route component
 function ProtectedRoute({ children, requireManager = false }: { children: React.ReactNode; requireManager?: boolean }) {
@@ -267,6 +270,33 @@ function App() {
         element={
           <ProtectedRoute>
             <CompanyUsersPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/documents"
+        element={
+          <ProtectedRoute>
+            <DocumentsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute requireManager>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/routes"
+        element={
+          <ProtectedRoute>
+            <RoutePlanningPage />
           </ProtectedRoute>
         }
       />
