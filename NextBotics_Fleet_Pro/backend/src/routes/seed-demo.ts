@@ -172,30 +172,47 @@ const checkDemoDataExists = async (): Promise<boolean> => {
 /**
  * Create demo company and users
  */
-const createDemoUsers = async (): Promise<{ userId: string; staffId: string; role: string; email: string }[]> => {
-  const createdUsers: { userId: string; staffId: string; role: string; email: string }[] = [];
+const createDemoUsers = async (): Promise<{ userId: string; staffId: string; role: string; email: string; companyId: string }[]> => {
+  const createdUsers: { userId: string; staffId: string; role: string; email: string; companyId: string }[] = [];
+  
+  // First create the demo company
+  const companyResult = await query(
+    `INSERT INTO companies (id, name, slug, subscription_plan, subscription_status) 
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (slug) DO UPDATE SET name = $2
+     RETURNING id`,
+    [uuidv4(), DEMO_COMPANY.name, DEMO_COMPANY.slug, 'basic', 'active']
+  );
+  const companyId = companyResult[0].id;
+  console.log(`✅ Created/updated company: ${DEMO_COMPANY.name} (${companyId})`);
   
   for (const userData of DEMO_USERS) {
     const userId = uuidv4();
     const staffId = uuidv4();
     const hashedPassword = bcrypt.hashSync(userData.password, 10);
     
-    // Create user
+    // Split staff name into first and last name
+    const nameParts = userData.staffName.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || 'User';
+    
+    // Create user with company_id and name fields
     await query(
-      'INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)',
-      [userId, userData.email, hashedPassword, userData.role]
+      `INSERT INTO users (id, company_id, email, password_hash, first_name, last_name, role, is_active, must_change_password) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, companyId, userData.email, hashedPassword, firstName, lastName, userData.role, true, false]
     );
     
     // Create staff record
     const role = userData.driverRole || 'Staff';
     await query(
-      `INSERT INTO staff (id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [staffId, userData.staffNo, userData.staffName, userData.email, userData.phone, 
+      `INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [staffId, companyId, userData.staffNo, userData.staffName, userData.email, userData.phone, 
        userData.department, userData.branch, role, 95]
     );
     
-    createdUsers.push({ userId, staffId, role: userData.role, email: userData.email });
+    createdUsers.push({ userId, staffId, role: userData.role, email: userData.email, companyId });
     console.log(`✅ Created user: ${userData.email} (${userData.role})`);
   }
   
@@ -205,7 +222,7 @@ const createDemoUsers = async (): Promise<{ userId: string; staffId: string; rol
 /**
  * Create demo vehicles
  */
-const createVehicles = async (): Promise<string[]> => {
+const createVehicles = async (companyId: string): Promise<string[]> => {
   const vehicleIds: string[] = [];
   
   for (const v of VEHICLE_DATA) {
@@ -219,14 +236,14 @@ const createVehicles = async (): Promise<string[]> => {
     
     await query(`
       INSERT INTO vehicles (
-        id, registration_num, make_model, year_of_manufacture, year_of_purchase,
+        id, company_id, registration_num, make_model, year_of_manufacture, year_of_purchase,
         department, branch, status, current_mileage, ownership,
         target_consumption_rate, last_service_date, next_service_due,
         minor_service_interval, medium_service_interval, major_service_interval,
         replacement_mileage, replacement_age
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     `, [
-      id, v.reg, `${v.make} ${v.model}`, v.year, v.year,
+      id, companyId, v.reg, `${v.make} ${v.model}`, v.year, v.year,
       v.dept, 'Head Office', v.status, mileage, 'Company Owned',
       8.5, lastService.toISOString().split('T')[0], nextService.toISOString().split('T')[0],
       5000, 15000, 45000, 200000, 5
@@ -242,7 +259,7 @@ const createVehicles = async (): Promise<string[]> => {
 /**
  * Create demo drivers (additional to staff users)
  */
-const createDrivers = async (vehicleIds: string[]): Promise<string[]> => {
+const createDrivers = async (vehicleIds: string[], companyId: string): Promise<string[]> => {
   const driverIds: string[] = [];
   
   for (const d of DRIVER_DATA) {
@@ -250,9 +267,9 @@ const createDrivers = async (vehicleIds: string[]): Promise<string[]> => {
     const staffNo = `DRV${String(Math.floor(Math.random() * 900) + 100).padStart(3, '0')}`;
     
     await query(
-      `INSERT INTO staff (id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [id, staffNo, d.name, `${staffNo.toLowerCase()}@nextfleet.com`, d.phone, 
+      `INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [id, companyId, staffNo, d.name, `${staffNo.toLowerCase()}@nextfleet.com`, d.phone, 
        'Transport', 'Main Depot', 'Driver', Math.floor(Math.random() * 15) + 85]
     );
     
@@ -266,7 +283,7 @@ const createDrivers = async (vehicleIds: string[]): Promise<string[]> => {
 /**
  * Create fuel transactions
  */
-const createFuelTransactions = async (vehicleIds: string[]): Promise<void> => {
+const createFuelTransactions = async (vehicleIds: string[], companyId: string): Promise<void> => {
   const today = new Date();
   
   for (let i = 0; i < 15; i++) {
@@ -302,7 +319,7 @@ const createFuelTransactions = async (vehicleIds: string[]): Promise<void> => {
 /**
  * Create routes/assignments
  */
-const createAssignments = async (vehicleIds: string[], driverIds: string[]): Promise<string[]> => {
+const createAssignments = async (vehicleIds: string[], driverIds: string[], companyId: string): Promise<string[]> => {
   const routeIds: string[] = [];
   const today = new Date();
   
@@ -344,7 +361,7 @@ const createAssignments = async (vehicleIds: string[], driverIds: string[]): Pro
 /**
  * Create trips (requisitions)
  */
-const createTrips = async (vehicleIds: string[], driverIds: string[], staffIds: string[]): Promise<void> => {
+const createTrips = async (vehicleIds: string[], driverIds: string[], staffIds: string[], companyId: string): Promise<void> => {
   const today = new Date();
   const statuses = ['completed', 'completed', 'approved'];
   const purposes = ['Client Meeting', 'Delivery', 'Site Inspection', 'Training', 'Emergency Response'];
@@ -389,7 +406,7 @@ const createTrips = async (vehicleIds: string[], driverIds: string[], staffIds: 
 /**
  * Create inventory items
  */
-const createInventory = async (): Promise<string[]> => {
+const createInventory = async (companyId: string): Promise<string[]> => {
   const partIds: string[] = [];
   
   for (const item of INVENTORY_DATA) {
@@ -416,7 +433,7 @@ const createInventory = async (): Promise<string[]> => {
 /**
  * Create suppliers
  */
-const createSuppliers = async (): Promise<void> => {
+const createSuppliers = async (companyId: string): Promise<void> => {
   for (const s of SUPPLIER_DATA) {
     await query(`
       INSERT INTO customers (id, customer_name, customer_email, customer_phone, customer_address)
@@ -430,7 +447,7 @@ const createSuppliers = async (): Promise<void> => {
 /**
  * Create invoices
  */
-const createInvoices = async (vehicleIds: string[]): Promise<void> => {
+const createInvoices = async (vehicleIds: string[], companyId: string): Promise<void> => {
   const today = new Date();
   
   for (let i = 0; i < 5; i++) {
@@ -468,7 +485,7 @@ const createInvoices = async (vehicleIds: string[]): Promise<void> => {
 /**
  * Create alerts
  */
-const createAlerts = async (vehicleIds: string[], driverIds: string[]): Promise<void> => {
+const createAlerts = async (vehicleIds: string[], driverIds: string[], companyId: string): Promise<void> => {
   const today = new Date();
   
   for (let i = 0; i < 10; i++) {
@@ -500,7 +517,7 @@ const createAlerts = async (vehicleIds: string[], driverIds: string[]): Promise<
 /**
  * Create documents with expiry dates
  */
-const createDocuments = async (vehicleIds: string[]): Promise<void> => {
+const createDocuments = async (vehicleIds: string[], companyId: string): Promise<void> => {
   const today = new Date();
   
   for (let i = 0; i < 5; i++) {
@@ -553,38 +570,39 @@ router.get('/', async (req: Request, res: Response) => {
     
     // 1. Create users
     const createdUsers = await createDemoUsers();
+    const companyId = createdUsers[0].companyId;
     
     // 2. Create vehicles
-    const vehicleIds = await createVehicles();
+    const vehicleIds = await createVehicles(companyId);
     
     // 3. Create drivers
-    const driverIds = await createDrivers(vehicleIds);
+    const driverIds = await createDrivers(vehicleIds, companyId);
     const allDriverIds = [...driverIds, ...createdUsers.filter(u => u.role === 'viewer').map(u => u.staffId)];
     const allStaffIds = createdUsers.map(u => u.staffId);
     
     // 4. Create fuel transactions
-    await createFuelTransactions(vehicleIds);
+    await createFuelTransactions(vehicleIds, companyId);
     
     // 5. Create assignments/routes
-    const routeIds = await createAssignments(vehicleIds, allDriverIds);
+    const routeIds = await createAssignments(vehicleIds, allDriverIds, companyId);
     
     // 6. Create trips
-    await createTrips(vehicleIds, allDriverIds, allStaffIds);
+    await createTrips(vehicleIds, allDriverIds, allStaffIds, companyId);
     
     // 7. Create inventory
-    const partIds = await createInventory();
+    const partIds = await createInventory(companyId);
     
     // 8. Create suppliers
-    await createSuppliers();
+    await createSuppliers(companyId);
     
     // 9. Create invoices
-    await createInvoices(vehicleIds);
+    await createInvoices(vehicleIds, companyId);
     
     // 10. Create alerts
-    await createAlerts(vehicleIds, allDriverIds);
+    await createAlerts(vehicleIds, allDriverIds, companyId);
     
     // 11. Create documents
-    await createDocuments(vehicleIds);
+    await createDocuments(vehicleIds, companyId);
     
     console.log('✅ Demo data seeding completed!');
     
