@@ -114,6 +114,10 @@ app.use('/api/admin', adminRoutes);
 import seedDemoRoutes from './routes/seed-demo';
 app.use('/api', seedDemoRoutes);
 
+// Debug routes (remove in production)
+import debugRoutes from './routes/debug';
+app.use('/api/debug', debugRoutes);
+
 // GraphQL endpoint
 const schema = makeExecutableSchema({ typeDefs, resolvers });
 app.use('/graphql', authMiddleware, createHandler({
