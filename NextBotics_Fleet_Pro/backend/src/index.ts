@@ -75,6 +75,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Health diagnostic routes (no auth required)
+import healthRoutes from './routes/health';
+app.use('/api/health', healthRoutes);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
