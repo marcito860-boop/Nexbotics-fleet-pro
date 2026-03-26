@@ -77,12 +77,19 @@ interface MaintenanceRecord {
   category: string;
   title: string;
   description?: string;
+  providerId?: string;
   providerName?: string;
+  scheduledDate?: string;
+  startedDate?: string;
   completedDate?: string;
   serviceMileage?: number;
+  laborCost: number;
+  partsCost: number;
+  otherCost: number;
   totalCost: number;
   status: string;
   isEmergency: boolean;
+  technicianName?: string;
 }
 
 interface MaintenanceReminder {
