@@ -395,7 +395,6 @@ function mapRowToRecord(row: any): MaintenanceRecord {
     title: row.title,
     description: row.description,
     providerId: row.provider_id,
-    providerName: row.provider_name,
     scheduledDate: row.scheduled_date ? new Date(row.scheduled_date) : undefined,
     startedDate: row.started_date ? new Date(row.started_date) : undefined,
     completedDate: row.completed_date ? new Date(row.completed_date) : undefined,
@@ -412,7 +411,6 @@ function mapRowToRecord(row: any): MaintenanceRecord {
     technicianName: row.technician_name,
     driverId: row.driver_id,
     warrantyMonths: row.warranty_months ? parseInt(row.warranty_months) : undefined,
-    warrantyExpiry: row.warranty_expiry ? new Date(row.warranty_expiry) : undefined,
     invoiceNumber: row.invoice_number,
     documents: row.documents,
     notes: row.notes,
@@ -1126,12 +1124,12 @@ export class MaintenanceRecordModel {
       const recordRows = await client.query(
         `INSERT INTO maintenance_records (
           company_id, vehicle_id, schedule_id, service_type, category, title, description,
-          provider_id, provider_name, scheduled_date, started_date, completed_date,
+          provider_id, scheduled_date, started_date, completed_date,
           service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
           status, breakdown_location, breakdown_cause, is_emergency,
-          technician_name, driver_id, warranty_months, warranty_expiry,
+          technician_name, driver_id, warranty_months,
           invoice_number, documents, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         RETURNING *`,
         [
           companyId,
@@ -1142,7 +1140,6 @@ export class MaintenanceRecordModel {
           input.title,
           input.description || null,
           input.providerId || null,
-          input.providerName || null,
           input.scheduledDate || null,
           input.startedDate || null,
           input.completedDate || null,
@@ -1158,7 +1155,6 @@ export class MaintenanceRecordModel {
           input.technicianName || null,
           input.driverId || null,
           input.warrantyMonths || null,
-          warrantyExpiry || null,
           input.invoiceNumber || null,
           input.documents ? JSON.stringify(input.documents) : null,
           input.notes || null,
