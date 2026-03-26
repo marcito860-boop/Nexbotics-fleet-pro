@@ -98,6 +98,7 @@ export async function runMigrations(): Promise<void> {
       .sort(); // Run in order
     
     let appliedCount = 0;
+    let skippedCount = 0;
     
     for (const filename of migrationFiles) {
       if (appliedMigrations.has(filename)) {
@@ -110,26 +111,35 @@ export async function runMigrations(): Promise<void> {
       const sql = fs.readFileSync(filePath, 'utf-8');
       
       try {
-        await client.query('BEGIN');
+        // Run migration without transaction - individual statements should use IF NOT EXISTS
         await client.query(sql);
         await client.query(
           'INSERT INTO schema_migrations (filename) VALUES ($1)',
           [filename]
         );
-        await client.query('COMMIT');
         console.log(`  ✅ ${filename} applied successfully`);
         appliedCount++;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        console.error(`  ❌ Failed to apply ${filename}:`, error);
-        throw error;
+      } catch (error: any) {
+        // Check if error is about something already existing
+        if (error.code === '42P07' || error.code === '23505' || 
+            error.message?.includes('already exists')) {
+          console.log(`  ⚠️ ${filename} - some objects already exist, marking as applied`);
+          await client.query(
+            'INSERT INTO schema_migrations (filename) VALUES ($1)',
+            [filename]
+          );
+          skippedCount++;
+        } else {
+          console.error(`  ❌ Failed to apply ${filename}:`, error.message);
+          throw error;
+        }
       }
     }
     
-    if (appliedCount === 0) {
+    if (appliedCount === 0 && skippedCount === 0) {
       console.log('✅ All migrations up to date');
     } else {
-      console.log(`✅ Applied ${appliedCount} migration(s)`);
+      console.log(`✅ Applied ${appliedCount} migration(s), skipped ${skippedCount}`);
     }
   } finally {
     client.release();

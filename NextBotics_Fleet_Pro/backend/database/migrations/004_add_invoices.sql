@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS invoice_categories (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_invoice_categories_company ON invoice_categories(company_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_categories_company ON invoice_categories(company_id);
 
 -- Invoices table
 CREATE TABLE IF NOT EXISTS invoices (
@@ -47,11 +47,11 @@ CREATE TABLE IF NOT EXISTS invoices (
   UNIQUE(company_id, invoice_number)
 );
 
-CREATE INDEX idx_invoices_company ON invoices(company_id);
-CREATE INDEX idx_invoices_status ON invoices(status);
-CREATE INDEX idx_invoices_vendor ON invoices(vendor_name);
-CREATE INDEX idx_invoices_date ON invoices(invoice_date);
-CREATE INDEX idx_invoices_due_date ON invoices(due_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_invoices_vendor ON invoices(vendor_name);
+CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date);
+CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
 
 -- Invoice line items
 CREATE TABLE IF NOT EXISTS invoice_items (
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_invoice_items_invoice ON invoice_items(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice ON invoice_items(invoice_id);
 
 -- Invoice audit log
 CREATE TABLE IF NOT EXISTS invoice_audit_log (
@@ -82,4 +82,4 @@ CREATE TABLE IF NOT EXISTS invoice_audit_log (
   notes TEXT
 );
 
-CREATE INDEX idx_invoice_audit_invoice ON invoice_audit_log(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_audit_invoice ON invoice_audit_log(invoice_id);
