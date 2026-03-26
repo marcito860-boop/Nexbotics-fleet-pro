@@ -14,6 +14,26 @@ const DEMO_COMPANY = {
   address: '123 Fleet Street, Logistics City, LC 12345'
 };
 
+// G4S Company and User
+const G4S_COMPANY = {
+  name: 'G4S Security Services',
+  slug: 'g4s-security',
+  email: 'info@g4s.com',
+  phone: '+254 700 000 000',
+  address: 'G4S Plaza, Nairobi, Kenya'
+};
+
+const G4S_USER = {
+  email: 'pilot@g4s.com',
+  password: 'G4SPilot2024!',
+  role: 'admin',
+  staffName: 'G4S Pilot Admin',
+  staffNo: 'G4S001',
+  department: 'Security Operations',
+  branch: 'Head Office',
+  phone: '+254 700 000 000'
+};
+
 // Demo users configuration
 const DEMO_USERS = [
   {
@@ -660,6 +680,82 @@ router.post('/', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to reseed demo data',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/seed-demo/g4s - Create G4S company and user
+router.post('/g4s', async (req: Request, res: Response) => {
+  try {
+    // Check if G4S user already exists
+    const existingUser = await query(
+      "SELECT COUNT(*) as count FROM users WHERE email = 'pilot@g4s.com'"
+    );
+    
+    const userExists = parseInt(existingUser[0].count) > 0;
+    
+    // Create G4S company
+    const companyResult = await query(
+      `INSERT INTO companies (id, name, slug, subscription_plan, subscription_status) 
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (slug) DO UPDATE SET name = $2
+       RETURNING id`,
+      [uuidv4(), G4S_COMPANY.name, G4S_COMPANY.slug, 'enterprise', 'active']
+    );
+    const companyId = companyResult[0].id;
+    console.log(`✅ G4S Company created/updated: ${G4S_COMPANY.name}`);
+    
+    // Create G4S admin user
+    const userId = uuidv4();
+    const staffId = uuidv4();
+    const hashedPassword = bcrypt.hashSync(G4S_USER.password, 10);
+    const nameParts = G4S_USER.staffName.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || 'Admin';
+    
+    await query(
+      `INSERT INTO users (id, company_id, email, password_hash, first_name, last_name, role, is_active, must_change_password) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (email) DO UPDATE SET
+         password_hash = $4,
+         role = $7,
+         is_active = $8,
+         company_id = $2`,
+      [userId, companyId, G4S_USER.email, hashedPassword, firstName, lastName, G4S_USER.role, true, false]
+    );
+    
+    // Create staff record
+    await query(
+      `INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (email) DO UPDATE SET
+         company_id = $2,
+         staff_name = $4`,
+      [staffId, companyId, G4S_USER.staffNo, G4S_USER.staffName, G4S_USER.email, 
+       G4S_USER.phone, G4S_USER.department, G4S_USER.branch, 'Manager', 95]
+    );
+    
+    console.log(`✅ G4S User created: ${G4S_USER.email}`);
+    
+    res.json({
+      success: true,
+      message: userExists ? 'G4S user updated' : 'G4S company and user created',
+      alreadyExists: userExists,
+      credentials: {
+        email: G4S_USER.email,
+        password: G4S_USER.password,
+        role: G4S_USER.role,
+        staffName: G4S_USER.staffName
+      },
+      company: G4S_COMPANY
+    });
+    
+  } catch (error: any) {
+    console.error('G4S seeding error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create G4S user',
       details: error.message
     });
   }
