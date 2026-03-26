@@ -1096,7 +1096,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         overdueSchedules: overdueSchedules.schedules,
         activeDowntime: activeDowntime.downtimes,
         activeRepairs: activeRepairs.records,
-        vehiclesUnderMaintenance: vehiclesUnderMaintenance.rows
+        vehiclesUnderMaintenance: vehiclesUnderMaintenance
       }
     });
   } catch (error) {
