@@ -727,9 +727,14 @@ router.post('/records', [
     });
 
     res.status(201).json({ success: true, data: record, message: 'Maintenance record created successfully' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create record error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create maintenance record' });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create maintenance record',
+      message: error.message,
+      detail: error.detail || error.stack
+    });
   }
 });
 

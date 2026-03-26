@@ -657,7 +657,12 @@ router.post('/records', [
     }
     catch (error) {
         console.error('Create record error:', error);
-        res.status(500).json({ success: false, error: 'Failed to create maintenance record' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create maintenance record',
+            message: error.message,
+            detail: error.detail || error.stack
+        });
     }
 });
 // PUT /api/fleet/maintenance/records/:id - Update record
