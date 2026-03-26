@@ -190,6 +190,188 @@ class ImportExportModel {
         }
         return errors;
     }
+    static validateMaintenanceRecordRow(row, index) {
+        const errors = [];
+        if (!row.vehicle_registration?.trim()) {
+            errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+        }
+        if (!row.service_type?.trim()) {
+            errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type is required (preventive, repair, breakdown, emergency)' });
+        }
+        else {
+            const validTypes = ['preventive', 'repair', 'breakdown', 'emergency'];
+            if (!validTypes.includes(row.service_type.toLowerCase())) {
+                errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type must be: preventive, repair, breakdown, or emergency' });
+            }
+        }
+        if (!row.category?.trim()) {
+            errors.push({ row: index + 2, field: 'category', value: row.category, message: 'Category is required' });
+        }
+        if (!row.title?.trim()) {
+            errors.push({ row: index + 2, field: 'title', value: row.title, message: 'Title is required' });
+        }
+        if (row.scheduled_date && !this.isValidDate(row.scheduled_date)) {
+            errors.push({ row: index + 2, field: 'scheduled_date', value: row.scheduled_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+        }
+        if (row.completed_date && !this.isValidDate(row.completed_date)) {
+            errors.push({ row: index + 2, field: 'completed_date', value: row.completed_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+        }
+        if (row.service_mileage && isNaN(parseFloat(row.service_mileage))) {
+            errors.push({ row: index + 2, field: 'service_mileage', value: row.service_mileage, message: 'Service mileage must be a number' });
+        }
+        if (row.labor_cost && isNaN(parseFloat(row.labor_cost))) {
+            errors.push({ row: index + 2, field: 'labor_cost', value: row.labor_cost, message: 'Labor cost must be a number' });
+        }
+        if (row.parts_cost && isNaN(parseFloat(row.parts_cost))) {
+            errors.push({ row: index + 2, field: 'parts_cost', value: row.parts_cost, message: 'Parts cost must be a number' });
+        }
+        return errors;
+    }
+    static validateFuelRecordRow(row, index) {
+        const errors = [];
+        if (!row.vehicle_registration?.trim()) {
+            errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+        }
+        if (!row.date?.trim()) {
+            errors.push({ row: index + 2, field: 'date', value: row.date, message: 'Date is required' });
+        }
+        else if (!this.isValidDate(row.date)) {
+            errors.push({ row: index + 2, field: 'date', value: row.date, message: 'Invalid date format (use YYYY-MM-DD)' });
+        }
+        if (!row.liters?.trim()) {
+            errors.push({ row: index + 2, field: 'liters', value: row.liters, message: 'Liters is required' });
+        }
+        else if (isNaN(parseFloat(row.liters))) {
+            errors.push({ row: index + 2, field: 'liters', value: row.liters, message: 'Liters must be a number' });
+        }
+        if (!row.cost?.trim()) {
+            errors.push({ row: index + 2, field: 'cost', value: row.cost, message: 'Cost is required' });
+        }
+        else if (isNaN(parseFloat(row.cost))) {
+            errors.push({ row: index + 2, field: 'cost', value: row.cost, message: 'Cost must be a number' });
+        }
+        if (row.odometer && isNaN(parseFloat(row.odometer))) {
+            errors.push({ row: index + 2, field: 'odometer', value: row.odometer, message: 'Odometer must be a number' });
+        }
+        return errors;
+    }
+    static validateRouteRow(row, index) {
+        const errors = [];
+        if (!row.vehicle_registration?.trim()) {
+            errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+        }
+        if (!row.route_date?.trim()) {
+            errors.push({ row: index + 2, field: 'route_date', value: row.route_date, message: 'Route date is required' });
+        }
+        else if (!this.isValidDate(row.route_date)) {
+            errors.push({ row: index + 2, field: 'route_date', value: row.route_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+        }
+        if (!row.route_name?.trim()) {
+            errors.push({ row: index + 2, field: 'route_name', value: row.route_name, message: 'Route name is required' });
+        }
+        if (row.actual_km && isNaN(parseFloat(row.actual_km))) {
+            errors.push({ row: index + 2, field: 'actual_km', value: row.actual_km, message: 'Actual KM must be a number' });
+        }
+        if (row.actual_fuel && isNaN(parseFloat(row.actual_fuel))) {
+            errors.push({ row: index + 2, field: 'actual_fuel', value: row.actual_fuel, message: 'Actual fuel must be a number' });
+        }
+        return errors;
+    }
+    static validateAccidentRow(row, index) {
+        const errors = [];
+        if (!row.vehicle_registration?.trim()) {
+            errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+        }
+        if (!row.accident_date?.trim()) {
+            errors.push({ row: index + 2, field: 'accident_date', value: row.accident_date, message: 'Accident date is required' });
+        }
+        else if (!this.isValidDate(row.accident_date)) {
+            errors.push({ row: index + 2, field: 'accident_date', value: row.accident_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+        }
+        if (!row.location?.trim()) {
+            errors.push({ row: index + 2, field: 'location', value: row.location, message: 'Location is required' });
+        }
+        if (!row.description?.trim()) {
+            errors.push({ row: index + 2, field: 'description', value: row.description, message: 'Description is required' });
+        }
+        if (row.damage_cost && isNaN(parseFloat(row.damage_cost))) {
+            errors.push({ row: index + 2, field: 'damage_cost', value: row.damage_cost, message: 'Damage cost must be a number' });
+        }
+        return errors;
+    }
+    static validateStaffRow(row, index) {
+        const errors = [];
+        if (!row.staff_no?.trim()) {
+            errors.push({ row: index + 2, field: 'staff_no', value: row.staff_no, message: 'Staff number is required' });
+        }
+        if (!row.staff_name?.trim()) {
+            errors.push({ row: index + 2, field: 'staff_name', value: row.staff_name, message: 'Staff name is required' });
+        }
+        if (row.email && !row.email.includes('@')) {
+            errors.push({ row: index + 2, field: 'email', value: row.email, message: 'Invalid email format' });
+        }
+        return errors;
+    }
+    static validateServiceProviderRow(row, index) {
+        const errors = [];
+        if (!row.name?.trim()) {
+            errors.push({ row: index + 2, field: 'name', value: row.name, message: 'Provider name is required' });
+        }
+        if (row.type) {
+            const validTypes = ['general', 'specialist', 'dealership', 'emergency'];
+            if (!validTypes.includes(row.type.toLowerCase())) {
+                errors.push({ row: index + 2, field: 'type', value: row.type, message: 'Type must be: general, specialist, dealership, or emergency' });
+            }
+        }
+        return errors;
+    }
+    static validateSparePartRow(row, index) {
+        const errors = [];
+        if (!row.part_number?.trim()) {
+            errors.push({ row: index + 2, field: 'part_number', value: row.part_number, message: 'Part number is required' });
+        }
+        if (!row.name?.trim()) {
+            errors.push({ row: index + 2, field: 'name', value: row.name, message: 'Part name is required' });
+        }
+        if (!row.category?.trim()) {
+            errors.push({ row: index + 2, field: 'category', value: row.category, message: 'Category is required' });
+        }
+        if (row.unit_cost && isNaN(parseFloat(row.unit_cost))) {
+            errors.push({ row: index + 2, field: 'unit_cost', value: row.unit_cost, message: 'Unit cost must be a number' });
+        }
+        if (row.quantity_in_stock && isNaN(parseInt(row.quantity_in_stock))) {
+            errors.push({ row: index + 2, field: 'quantity_in_stock', value: row.quantity_in_stock, message: 'Quantity must be a number' });
+        }
+        return errors;
+    }
+    static validateMaintenanceScheduleRow(row, index) {
+        const errors = [];
+        if (!row.vehicle_registration?.trim()) {
+            errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+        }
+        if (!row.schedule_type?.trim()) {
+            errors.push({ row: index + 2, field: 'schedule_type', value: row.schedule_type, message: 'Schedule type is required (mileage_based, time_based, both)' });
+        }
+        else {
+            const validTypes = ['mileage_based', 'time_based', 'both'];
+            if (!validTypes.includes(row.schedule_type.toLowerCase())) {
+                errors.push({ row: index + 2, field: 'schedule_type', value: row.schedule_type, message: 'Schedule type must be: mileage_based, time_based, or both' });
+            }
+        }
+        if (!row.service_type?.trim()) {
+            errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type is required' });
+        }
+        if (!row.title?.trim()) {
+            errors.push({ row: index + 2, field: 'title', value: row.title, message: 'Title is required' });
+        }
+        if (row.interval_mileage && isNaN(parseInt(row.interval_mileage))) {
+            errors.push({ row: index + 2, field: 'interval_mileage', value: row.interval_mileage, message: 'Interval mileage must be a number' });
+        }
+        if (row.interval_months && isNaN(parseInt(row.interval_months))) {
+            errors.push({ row: index + 2, field: 'interval_months', value: row.interval_months, message: 'Interval months must be a number' });
+        }
+        return errors;
+    }
     static isValidDate(dateString) {
         const regex = /^\d{4}-\d{2}-\d{2}$/;
         if (!regex.test(dateString))

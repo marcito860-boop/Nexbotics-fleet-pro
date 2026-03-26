@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const express_validator_1 = require("express-validator");
 const auth_1 = require("../utils/auth");
+const database_1 = require("../database");
 const Maintenance_1 = require("../models/Maintenance");
 const router = (0, express_1.Router)();
 router.use(auth_1.authMiddleware);
@@ -954,8 +955,10 @@ router.post('/reminders/:id/dismiss', [
 router.get('/overview', async (req, res) => {
     try {
         const companyId = req.user.companyId;
+        // Get vehicles with maintenance status first
+        const vehiclesResult = await (0, database_1.query)('SELECT id, registration_number, make, model, year, status FROM vehicles WHERE company_id = $1 AND status = $2', [companyId, 'maintenance']);
         // Fetch all stats in parallel
-        const [scheduleStats, recordStats, reminderStats, downtimeStats, lowStockParts, overdueSchedules, activeDowntime] = await Promise.all([
+        const [scheduleStats, recordStats, reminderStats, downtimeStats, lowStockParts, overdueSchedules, activeDowntime, activeRepairs,] = await Promise.all([
             Maintenance_1.MaintenanceScheduleModel.getStats(companyId),
             Maintenance_1.MaintenanceRecordModel.getStats(companyId),
             Maintenance_1.MaintenanceReminderModel.getStats(companyId),
@@ -963,6 +966,8 @@ router.get('/overview', async (req, res) => {
             Maintenance_1.SparePartModel.findByCompany(companyId, { lowStockOnly: true, limit: 5 }),
             Maintenance_1.MaintenanceScheduleModel.findByCompany(companyId, { overdue: true, limit: 5 }),
             Maintenance_1.VehicleDowntimeModel.findByCompany(companyId, { active: true, limit: 5 }),
+            // Get active repairs (in_progress status)
+            Maintenance_1.MaintenanceRecordModel.findByCompany(companyId, { status: 'in_progress', limit: 10 }),
         ]);
         res.json({
             success: true,
@@ -974,12 +979,73 @@ router.get('/overview', async (req, res) => {
                 lowStockParts: lowStockParts.parts,
                 overdueSchedules: overdueSchedules.schedules,
                 activeDowntime: activeDowntime.downtimes,
+                activeRepairs: activeRepairs.records,
+                vehiclesUnderMaintenance: vehiclesResult
             }
         });
     }
     catch (error) {
         console.error('Maintenance overview error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch maintenance overview' });
+    }
+});
+// ==================== JOB CARDS ====================
+// GET /api/fleet/maintenance/job-cards - List job cards
+router.get('/job-cards', async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+        const { status, providerId, page = '1', perPage = '20' } = req.query;
+        const result = await Maintenance_1.JobCardModel.findByCompany(companyId, {
+            status: status,
+            providerId: providerId,
+            limit: parseInt(perPage),
+            offset: (parseInt(page) - 1) * parseInt(perPage),
+        });
+        res.json({
+            success: true,
+            data: {
+                items: result.jobCards,
+                total: result.total,
+                page: parseInt(page),
+                perPage: parseInt(perPage),
+                totalPages: Math.ceil(result.total / parseInt(perPage)),
+            },
+        });
+    }
+    catch (error) {
+        console.error('List job cards error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch job cards' });
+    }
+});
+// GET /api/fleet/maintenance/job-cards/:id - Get job card details
+router.get('/job-cards/:id', async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+        const jobCard = await Maintenance_1.JobCardModel.findById(req.params.id, companyId);
+        if (!jobCard) {
+            return res.status(404).json({ success: false, error: 'Job card not found' });
+        }
+        res.json({ success: true, data: jobCard });
+    }
+    catch (error) {
+        console.error('Get job card error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch job card' });
+    }
+});
+// PATCH /api/fleet/maintenance/job-cards/:id/status - Update job card status
+router.patch('/job-cards/:id/status', async (req, res) => {
+    try {
+        const companyId = req.user.companyId;
+        const { status, sentDate, actualCompletionDate, actualCost, garageNotes } = req.body;
+        const jobCard = await Maintenance_1.JobCardModel.updateStatus(req.params.id, companyId, status, { sentDate, actualCompletionDate, actualCost, garageNotes });
+        if (!jobCard) {
+            return res.status(404).json({ success: false, error: 'Job card not found' });
+        }
+        res.json({ success: true, data: jobCard });
+    }
+    catch (error) {
+        console.error('Update job card status error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update job card' });
     }
 });
 exports.default = router;

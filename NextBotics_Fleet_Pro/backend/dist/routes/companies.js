@@ -1,9 +1,46 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const express_validator_1 = require("express-validator");
+const database_1 = require("../database");
 const Company_1 = require("../models/Company");
 const auth_1 = require("../utils/auth");
+const password_1 = require("../utils/password");
+const uuid_1 = require("uuid");
+const bcrypt = __importStar(require("bcryptjs"));
 const router = (0, express_1.Router)();
 router.use(auth_1.authMiddleware);
 // GET /api/companies - List companies (super admin only, or current company for regular users)
@@ -129,10 +166,25 @@ router.post('/', [
             email: req.body.email
         };
         const company = await Company_1.CompanyModel.create(input);
+        // Auto-create default admin user with generated password
+        const adminEmail = `admin@${company.slug}.com`;
+        const generatedPassword = (0, password_1.generateSecurePassword)(10); // Simple 10-char password
+        const hashedPassword = bcrypt.hashSync(generatedPassword, 10);
+        await (0, database_1.query)(`INSERT INTO users (id, company_id, email, password_hash, first_name, last_name, role, is_active, must_change_password) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [(0, uuid_1.v4)(), company.id, adminEmail, hashedPassword, 'Admin', 'User', 'admin', true, true]);
+        // Also create staff record for the admin
+        await (0, database_1.query)(`INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [(0, uuid_1.v4)(), company.id, 'ADM001', 'System Administrator', adminEmail,
+            input.phone || '+254 700 000 000', 'Management', 'Head Office', 'Manager', 100]);
         res.status(201).json({
             success: true,
             data: company,
-            message: 'Company created successfully'
+            adminCredentials: {
+                email: adminEmail,
+                password: generatedPassword,
+                mustChangePassword: true
+            },
+            message: 'Company created successfully. Default admin user has been generated.'
         });
     }
     catch (error) {

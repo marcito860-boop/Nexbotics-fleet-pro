@@ -1,7 +1,7 @@
 export interface ImportJob {
     id: string;
     companyId: string;
-    importType: 'vehicles' | 'drivers' | 'inventory' | 'requisitions' | 'audits' | 'invoices';
+    importType: 'vehicles' | 'drivers' | 'inventory' | 'maintenance_records' | 'fuel_records' | 'routes' | 'accidents' | 'staff' | 'service_providers' | 'spare_parts' | 'maintenance_schedules';
     status: 'pending' | 'processing' | 'completed' | 'failed';
     fileName: string;
     totalRows: number;
@@ -50,6 +50,14 @@ export declare class ImportExportModel {
     static validateVehicleRow(row: any, index: number): ImportError[];
     static validateDriverRow(row: any, index: number): ImportError[];
     static validateInventoryRow(row: any, index: number): ImportError[];
+    static validateMaintenanceRecordRow(row: any, index: number): ImportError[];
+    static validateFuelRecordRow(row: any, index: number): ImportError[];
+    static validateRouteRow(row: any, index: number): ImportError[];
+    static validateAccidentRow(row: any, index: number): ImportError[];
+    static validateStaffRow(row: any, index: number): ImportError[];
+    static validateServiceProviderRow(row: any, index: number): ImportError[];
+    static validateSparePartRow(row: any, index: number): ImportError[];
+    static validateMaintenanceScheduleRow(row: any, index: number): ImportError[];
     private static isValidDate;
     private static mapImportJobRow;
     private static mapExportJobRow;

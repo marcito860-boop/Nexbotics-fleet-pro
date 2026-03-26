@@ -250,3 +250,65 @@ CREATE INDEX IF NOT EXISTS idx_spare_parts_stock ON spare_parts(quantity_in_stoc
 CREATE INDEX IF NOT EXISTS idx_service_providers_type ON service_providers(type);
 CREATE INDEX IF NOT EXISTS idx_maintenance_reminders_status ON maintenance_reminders(status);
 CREATE INDEX IF NOT EXISTS idx_maintenance_reminders_due ON maintenance_reminders(due_date);
+
+-- ============================================
+-- JOB CARDS TABLE (for external provider work)
+-- ============================================
+CREATE TABLE IF NOT EXISTS job_cards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    record_id UUID REFERENCES maintenance_records(id) ON DELETE CASCADE,
+    provider_id UUID REFERENCES service_providers(id) ON DELETE SET NULL,
+    card_number VARCHAR(100) NOT NULL UNIQUE,
+    status VARCHAR(50) DEFAULT 'pending', -- pending, in_progress, completed, cancelled
+    description TEXT,
+    estimated_cost DECIMAL(10,2) DEFAULT 0,
+    actual_cost DECIMAL(10,2) DEFAULT 0,
+    internal_notes TEXT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_job_cards_record ON job_cards(record_id);
+CREATE INDEX IF NOT EXISTS idx_job_cards_provider ON job_cards(provider_id);
+CREATE INDEX IF NOT EXISTS idx_job_cards_status ON job_cards(status);
+CREATE INDEX IF NOT EXISTS idx_job_cards_number ON job_cards(card_number);
+
+-- ============================================
+-- TRIPS TABLE (for route analytics)
+-- ============================================
+CREATE TABLE IF NOT EXISTS trips (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+    driver_id UUID REFERENCES drivers(id) ON DELETE SET NULL,
+    requisition_id UUID REFERENCES requisitions(id) ON DELETE SET NULL,
+    
+    start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    end_time TIMESTAMP WITH TIME ZONE,
+    
+    start_odometer DECIMAL(10,1),
+    end_odometer DECIMAL(10,1),
+    distance_km DECIMAL(10,1),
+    
+    start_location TEXT,
+    end_location TEXT,
+    
+    fuel_consumed DECIMAL(8,2),
+    fuel_cost DECIMAL(10,2),
+    
+    status VARCHAR(50) DEFAULT 'in_progress', -- in_progress, completed, cancelled
+    purpose TEXT,
+    notes TEXT,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_trips_vehicle ON trips(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_trips_driver ON trips(driver_id);
+CREATE INDEX IF NOT EXISTS idx_trips_company ON trips(company_id);
+CREATE INDEX IF NOT EXISTS idx_trips_status ON trips(status);
+CREATE INDEX IF NOT EXISTS idx_trips_dates ON trips(start_time, end_time);

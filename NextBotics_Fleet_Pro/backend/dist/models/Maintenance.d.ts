@@ -419,4 +419,53 @@ export declare class MaintenanceReminderModel {
         warning: number;
     }>;
 }
+export interface JobCard {
+    id: string;
+    companyId: string;
+    recordId: string;
+    providerId?: string;
+    cardNumber: string;
+    status: 'pending' | 'sent' | 'in_progress' | 'completed' | 'cancelled';
+    description?: string;
+    estimatedCost?: number;
+    actualCost?: number;
+    sentDate?: Date;
+    expectedCompletionDate?: Date;
+    actualCompletionDate?: Date;
+    garageNotes?: string;
+    internalNotes?: string;
+    documents?: any[];
+    createdAt: Date;
+    updatedAt: Date;
+    providerName?: string;
+    vehicleRegistration?: string;
+    serviceTitle?: string;
+}
+export interface CreateJobCardInput {
+    recordId: string;
+    providerId?: string;
+    description?: string;
+    estimatedCost?: number;
+    expectedCompletionDate?: Date;
+    internalNotes?: string;
+}
+export declare class JobCardModel {
+    static findById(id: string, companyId: string): Promise<JobCard | null>;
+    static findByCompany(companyId: string, options?: {
+        status?: string;
+        providerId?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<{
+        jobCards: JobCard[];
+        total: number;
+    }>;
+    static create(companyId: string, input: CreateJobCardInput): Promise<JobCard>;
+    static updateStatus(id: string, companyId: string, status: string, updates?: {
+        sentDate?: Date;
+        actualCompletionDate?: Date;
+        actualCost?: number;
+        garageNotes?: string;
+    }): Promise<JobCard | null>;
+}
 //# sourceMappingURL=Maintenance.d.ts.map

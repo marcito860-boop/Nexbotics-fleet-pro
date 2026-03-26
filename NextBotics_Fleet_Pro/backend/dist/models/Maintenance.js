@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MaintenanceReminderModel = exports.VehicleDowntimeModel = exports.MaintenanceRecordModel = exports.MaintenanceScheduleModel = exports.SparePartModel = exports.ServiceProviderModel = void 0;
+exports.JobCardModel = exports.MaintenanceReminderModel = exports.VehicleDowntimeModel = exports.MaintenanceRecordModel = exports.MaintenanceScheduleModel = exports.SparePartModel = exports.ServiceProviderModel = void 0;
 const database_1 = require("../database");
 // Get pool for transactions
 const getPool = async () => {
@@ -97,11 +97,11 @@ function mapRowToSchedule(row) {
         vehicleId: row.vehicle_id,
         scheduleType: row.schedule_type,
         serviceType: row.service_type,
-        title: row.title,
+        title: row.service_name || row.title,
         description: row.description,
         intervalMileage: row.interval_mileage ? parseInt(row.interval_mileage) : undefined,
         lastServiceMileage: parseFloat(row.last_service_mileage || 0),
-        nextServiceMileage: row.next_service_mileage ? parseFloat(row.next_service_mileage) : undefined,
+        nextServiceMileage: row.next_service_km ? parseFloat(row.next_service_km) : undefined,
         intervalMonths: row.interval_months ? parseInt(row.interval_months) : undefined,
         lastServiceDate: row.last_service_date ? new Date(row.last_service_date) : undefined,
         nextServiceDate: row.next_service_date ? new Date(row.next_service_date) : undefined,
@@ -131,7 +131,6 @@ function mapRowToRecord(row) {
         title: row.title,
         description: row.description,
         providerId: row.provider_id,
-        providerName: row.provider_name,
         scheduledDate: row.scheduled_date ? new Date(row.scheduled_date) : undefined,
         startedDate: row.started_date ? new Date(row.started_date) : undefined,
         completedDate: row.completed_date ? new Date(row.completed_date) : undefined,
@@ -184,7 +183,7 @@ function mapRowToDowntime(row) {
         startTime: row.start_time,
         endTime: row.end_time,
         durationHours: row.duration_hours ? parseFloat(row.duration_hours) : undefined,
-        durationDays: row.duration_days ? parseInt(row.duration_days) : undefined,
+        durationDays: row.duration_hours ? Math.ceil(parseFloat(row.duration_hours) / 24) : undefined,
         reason: row.reason,
         impact: row.impact,
         replacementVehicleId: row.replacement_vehicle_id,
@@ -533,8 +532,8 @@ class MaintenanceScheduleModel {
             nextServiceMileage = input.lastServiceMileage + input.intervalMileage;
         }
         const rows = await (0, database_1.query)(`INSERT INTO maintenance_schedules (
-        company_id, vehicle_id, schedule_type, service_type, title, description,
-        interval_mileage, last_service_mileage, next_service_mileage,
+        company_id, vehicle_id, schedule_type, service_type, service_name, description,
+        interval_mileage, last_service_mileage, next_service_km,
         interval_months, last_service_date, next_service_date,
         estimated_cost, estimated_duration_hours, assigned_provider_id,
         reminder_days_before, reminder_mileage_before, priority
@@ -702,12 +701,12 @@ class MaintenanceRecordModel {
             // Create record
             const recordRows = await client.query(`INSERT INTO maintenance_records (
           company_id, vehicle_id, schedule_id, service_type, category, title, description,
-          provider_id, provider_name, scheduled_date, started_date, completed_date,
+          provider_id, scheduled_date, started_date, completed_date,
           service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
           status, breakdown_location, breakdown_cause, is_emergency,
           technician_name, driver_id, warranty_months, warranty_expiry,
           invoice_number, documents, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         RETURNING *`, [
                 companyId,
                 input.vehicleId,
@@ -717,7 +716,6 @@ class MaintenanceRecordModel {
                 input.title,
                 input.description || null,
                 input.providerId || null,
-                input.providerName || null,
                 input.scheduledDate || null,
                 input.startedDate || null,
                 input.completedDate || null,
@@ -739,6 +737,26 @@ class MaintenanceRecordModel {
                 input.notes || null,
             ]);
             const record = recordRows.rows[0];
+            // Create job card if external provider is specified
+            if (input.providerId) {
+                const today = new Date();
+                const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
+                const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+                const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
+                await client.query(`INSERT INTO job_cards (
+            company_id, record_id, provider_id, card_number, status, description,
+            estimated_cost, internal_notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
+                    companyId,
+                    record.id,
+                    input.providerId,
+                    cardNumber,
+                    'pending',
+                    input.description || null,
+                    (input.laborCost || 0) + (input.partsCost || 0) + (input.otherCost || 0),
+                    `Auto-created from maintenance record: ${input.title}`,
+                ]);
+            }
             // Add parts if provided
             if (input.parts && input.parts.length > 0) {
                 for (const part of input.parts) {
@@ -759,7 +777,7 @@ class MaintenanceRecordModel {
                 await client.query(`UPDATE maintenance_schedules 
            SET last_service_date = $1, last_service_mileage = $2,
                next_service_date = CASE WHEN interval_months IS NOT NULL THEN $1 + INTERVAL '1 month' * interval_months ELSE next_service_date END,
-               next_service_mileage = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_mileage END
+               next_service_km = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_km END
            WHERE id = $3`, [input.completedDate || new Date(), input.serviceMileage || 0, input.scheduleId]);
             }
             await client.query('COMMIT');
@@ -967,9 +985,9 @@ class VehicleDowntimeModel {
     static async getStats(companyId, dateFrom, dateTo) {
         let sql = `
       SELECT 
-        COALESCE(SUM(duration_days), 0) as total_days,
+        COALESCE(SUM(COALESCE(duration_hours, 0) / 24.0), 0) as total_days,
         COUNT(CASE WHEN end_date IS NULL THEN 1 END) as active_count,
-        COALESCE(AVG(duration_days), 0) as avg_duration,
+        COALESCE(AVG(COALESCE(duration_hours, 0) / 24.0), 0) as avg_duration,
         downtime_type,
         COUNT(*) as type_count
        FROM vehicle_downtime WHERE company_id = $1`;
@@ -989,7 +1007,7 @@ class VehicleDowntimeModel {
             downtimeByType[row.downtime_type] = parseInt(row.type_count);
         });
         return {
-            totalDowntimeDays: rows.length > 0 ? parseInt(rows[0].total_days) : 0,
+            totalDowntimeDays: rows.length > 0 ? parseFloat(rows[0].total_days) : 0,
             activeDowntimeCount: rows.length > 0 ? parseInt(rows[0].active_count) : 0,
             averageDurationDays: rows.length > 0 ? parseFloat(rows[0].avg_duration) : 0,
             downtimeByType,
@@ -1001,7 +1019,7 @@ exports.VehicleDowntimeModel = VehicleDowntimeModel;
 class MaintenanceReminderModel {
     static async findById(id, companyId) {
         const rows = await (0, database_1.query)(`SELECT mr.*, v.registration_number as vehicle_registration, v.make as vehicle_make, v.model as vehicle_model,
-              ms.title as schedule_title
+              ms.service_name as schedule_title
        FROM maintenance_reminders mr
        JOIN vehicles v ON mr.vehicle_id = v.id
        LEFT JOIN maintenance_schedules ms ON mr.schedule_id = ms.id
@@ -1011,7 +1029,7 @@ class MaintenanceReminderModel {
     static async findByCompany(companyId, options) {
         let sql = `
       SELECT mr.*, v.registration_number as vehicle_registration, v.make as vehicle_make, v.model as vehicle_model,
-             ms.title as schedule_title
+             ms.service_name as schedule_title
       FROM maintenance_reminders mr
       JOIN vehicles v ON mr.vehicle_id = v.id
       LEFT JOIN maintenance_schedules ms ON mr.schedule_id = ms.id
@@ -1095,16 +1113,16 @@ class MaintenanceReminderModel {
          ms.id as schedule_id,
          ms.vehicle_id,
          CASE 
-           WHEN ms.next_service_date IS NOT NULL AND ms.next_service_mileage IS NOT NULL THEN 'both'
+           WHEN ms.next_service_date IS NOT NULL AND ms.next_service_km IS NOT NULL THEN 'both'
            WHEN ms.next_service_date IS NOT NULL THEN 'time_due'
            ELSE 'mileage_due'
          END as reminder_type,
-         'Maintenance Due: ' || ms.title as title,
+         'Maintenance Due: ' || ms.service_name as title,
          'Vehicle ' || v.registration_number || ' requires ' || ms.service_type || ' service' as message,
-         ms.next_service_mileage,
+         ms.next_service_km as next_service_mileage,
          ms.next_service_date,
          CASE 
-           WHEN ms.next_service_date < CURRENT_DATE OR ms.next_service_mileage <= v.current_mileage THEN 'critical'
+           WHEN ms.next_service_date < CURRENT_DATE OR ms.next_service_km <= v.current_mileage THEN 'critical'
            WHEN ms.next_service_date <= CURRENT_DATE + INTERVAL '7 days' THEN 'warning'
            ELSE 'info'
          END as severity
@@ -1116,7 +1134,7 @@ class MaintenanceReminderModel {
          AND mr.id IS NULL
          AND (
            (ms.next_service_date IS NOT NULL AND ms.next_service_date <= CURRENT_DATE + INTERVAL '30 days')
-           OR (ms.next_service_mileage IS NOT NULL AND ms.next_service_mileage <= v.current_mileage + ms.reminder_mileage_before)
+           OR (ms.next_service_km IS NOT NULL AND ms.next_service_km <= v.current_mileage + ms.reminder_mileage_before)
          )`, [companyId]);
         return result.length || 0;
     }
@@ -1138,4 +1156,131 @@ class MaintenanceReminderModel {
     }
 }
 exports.MaintenanceReminderModel = MaintenanceReminderModel;
+function mapRowToJobCard(row) {
+    return {
+        id: row.id,
+        companyId: row.company_id,
+        recordId: row.record_id,
+        providerId: row.provider_id,
+        cardNumber: row.card_number,
+        status: row.status,
+        description: row.description,
+        estimatedCost: row.estimated_cost ? parseFloat(row.estimated_cost) : undefined,
+        actualCost: row.actual_cost ? parseFloat(row.actual_cost) : undefined,
+        sentDate: row.sent_date ? new Date(row.sent_date) : undefined,
+        expectedCompletionDate: row.expected_completion_date ? new Date(row.expected_completion_date) : undefined,
+        actualCompletionDate: row.actual_completion_date ? new Date(row.actual_completion_date) : undefined,
+        garageNotes: row.garage_notes,
+        internalNotes: row.internal_notes,
+        documents: row.documents,
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+        providerName: row.provider_name,
+        vehicleRegistration: row.vehicle_registration,
+        serviceTitle: row.service_title,
+    };
+}
+// ==================== Job Card Model ====================
+class JobCardModel {
+    static async findById(id, companyId) {
+        const rows = await (0, database_1.query)(`SELECT jc.*, sp.name as provider_name, v.registration_number as vehicle_registration,
+              mr.title as service_title
+       FROM job_cards jc
+       LEFT JOIN service_providers sp ON jc.provider_id = sp.id
+       JOIN maintenance_records mr ON jc.record_id = mr.id
+       JOIN vehicles v ON mr.vehicle_id = v.id
+       WHERE jc.id = $1 AND jc.company_id = $2`, [id, companyId]);
+        return rows.length > 0 ? mapRowToJobCard(rows[0]) : null;
+    }
+    static async findByCompany(companyId, options) {
+        let sql = `
+      SELECT jc.*, sp.name as provider_name, v.registration_number as vehicle_registration,
+             mr.title as service_title
+      FROM job_cards jc
+      LEFT JOIN service_providers sp ON jc.provider_id = sp.id
+      JOIN maintenance_records mr ON jc.record_id = mr.id
+      JOIN vehicles v ON mr.vehicle_id = v.id
+      WHERE jc.company_id = $1`;
+        let countSql = 'SELECT COUNT(*) as total FROM job_cards WHERE company_id = $1';
+        const params = [companyId];
+        if (options?.status) {
+            sql += ` AND jc.status = $${params.length + 1}`;
+            countSql += ` AND status = $${params.length + 1}`;
+            params.push(options.status);
+        }
+        if (options?.providerId) {
+            sql += ` AND jc.provider_id = $${params.length + 1}`;
+            countSql += ` AND provider_id = $${params.length + 1}`;
+            params.push(options.providerId);
+        }
+        sql += ' ORDER BY jc.created_at DESC';
+        if (options?.limit) {
+            sql += ` LIMIT $${params.length + 1}`;
+            params.push(options.limit);
+            if (options?.offset) {
+                sql += ` OFFSET $${params.length + 1}`;
+                params.push(options.offset);
+            }
+        }
+        const [cardRows, countRows] = await Promise.all([
+            (0, database_1.query)(sql, params),
+            (0, database_1.query)(countSql, params.slice(0, options?.limit ? params.length - (options.offset ? 2 : 1) : params.length))
+        ]);
+        return {
+            jobCards: cardRows.map(mapRowToJobCard),
+            total: parseInt(countRows[0].total)
+        };
+    }
+    static async create(companyId, input) {
+        // Generate card number: JC-YYYYMMDD-XXXX
+        const today = new Date();
+        const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
+        const rows = await (0, database_1.query)(`INSERT INTO job_cards (
+        company_id, record_id, provider_id, card_number, status, description,
+        estimated_cost, expected_completion_date, internal_notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`, [
+            companyId,
+            input.recordId,
+            input.providerId || null,
+            cardNumber,
+            'pending',
+            input.description || null,
+            input.estimatedCost || null,
+            input.expectedCompletionDate || null,
+            input.internalNotes || null,
+        ]);
+        return this.findById(rows[0].id, companyId);
+    }
+    static async updateStatus(id, companyId, status, updates) {
+        const setFields = ['status = $1'];
+        const params = [status];
+        if (updates?.sentDate) {
+            setFields.push(`sent_date = $${params.length + 1}`);
+            params.push(updates.sentDate);
+        }
+        if (updates?.actualCompletionDate) {
+            setFields.push(`actual_completion_date = $${params.length + 1}`);
+            params.push(updates.actualCompletionDate);
+        }
+        if (updates?.actualCost !== undefined) {
+            setFields.push(`actual_cost = $${params.length + 1}`);
+            params.push(updates.actualCost);
+        }
+        if (updates?.garageNotes) {
+            setFields.push(`garage_notes = $${params.length + 1}`);
+            params.push(updates.garageNotes);
+        }
+        params.push(id, companyId);
+        const rows = await (0, database_1.query)(`UPDATE job_cards SET ${setFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $${params.length - 1} AND company_id = $${params.length}
+       RETURNING *`, params);
+        if (rows.length === 0)
+            return null;
+        return this.findById(rows[0].id, companyId);
+    }
+}
+exports.JobCardModel = JobCardModel;
 //# sourceMappingURL=Maintenance.js.map
