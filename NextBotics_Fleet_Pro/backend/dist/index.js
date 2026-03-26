@@ -69,6 +69,9 @@ app.use(express_1.default.urlencoded({ extended: true }));
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+// Health diagnostic routes (no auth required)
+const health_1 = __importDefault(require("./routes/health"));
+app.use('/api/health', health_1.default);
 // API routes
 app.use('/api/auth', auth_1.default);
 app.use('/api/users', users_1.default);
@@ -104,6 +107,9 @@ app.use('/api/admin', admin_1.default);
 // Demo data seeder (no auth required)
 const seed_demo_1 = __importDefault(require("./routes/seed-demo"));
 app.use('/api', seed_demo_1.default);
+// Debug routes (remove in production)
+const debug_1 = __importDefault(require("./routes/debug"));
+app.use('/api/debug', debug_1.default);
 // GraphQL endpoint
 const schema = (0, schema_1.makeExecutableSchema)({ typeDefs: schema_2.typeDefs, resolvers: resolvers_1.resolvers });
 app.use('/graphql', auth_2.authMiddleware, (0, express_2.createHandler)({

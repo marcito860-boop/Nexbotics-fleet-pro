@@ -196,18 +196,30 @@ const checkDemoDataExists = async () => {
  */
 const createDemoUsers = async () => {
     const createdUsers = [];
+    // First create the demo company
+    const companyResult = await (0, database_1.query)(`INSERT INTO companies (id, name, slug, subscription_plan, subscription_status) 
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (slug) DO UPDATE SET name = $2
+     RETURNING id`, [(0, uuid_1.v4)(), DEMO_COMPANY.name, DEMO_COMPANY.slug, 'basic', 'active']);
+    const companyId = companyResult[0].id;
+    console.log(`✅ Created/updated company: ${DEMO_COMPANY.name} (${companyId})`);
     for (const userData of DEMO_USERS) {
         const userId = (0, uuid_1.v4)();
         const staffId = (0, uuid_1.v4)();
         const hashedPassword = bcrypt.hashSync(userData.password, 10);
-        // Create user
-        await (0, database_1.query)('INSERT INTO users (id, email, password_hash, role) VALUES ($1, $2, $3, $4)', [userId, userData.email, hashedPassword, userData.role]);
+        // Split staff name into first and last name
+        const nameParts = userData.staffName.split(' ');
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || 'User';
+        // Create user with company_id and name fields
+        await (0, database_1.query)(`INSERT INTO users (id, company_id, email, password_hash, first_name, last_name, role, is_active, must_change_password) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [userId, companyId, userData.email, hashedPassword, firstName, lastName, userData.role, true, false]);
         // Create staff record
         const role = userData.driverRole || 'Staff';
-        await (0, database_1.query)(`INSERT INTO staff (id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [staffId, userData.staffNo, userData.staffName, userData.email, userData.phone,
+        await (0, database_1.query)(`INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [staffId, companyId, userData.staffNo, userData.staffName, userData.email, userData.phone,
             userData.department, userData.branch, role, 95]);
-        createdUsers.push({ userId, staffId, role: userData.role, email: userData.email });
+        createdUsers.push({ userId, staffId, role: userData.role, email: userData.email, companyId });
         console.log(`✅ Created user: ${userData.email} (${userData.role})`);
     }
     return createdUsers;
@@ -215,7 +227,7 @@ const createDemoUsers = async () => {
 /**
  * Create demo vehicles
  */
-const createVehicles = async () => {
+const createVehicles = async (companyId) => {
     const vehicleIds = [];
     for (const v of VEHICLE_DATA) {
         const id = (0, uuid_1.v4)();
@@ -226,14 +238,14 @@ const createVehicles = async () => {
         nextService.setMonth(nextService.getMonth() + 3);
         await (0, database_1.query)(`
       INSERT INTO vehicles (
-        id, registration_num, make_model, year_of_manufacture, year_of_purchase,
+        id, company_id, registration_num, make_model, year_of_manufacture, year_of_purchase,
         department, branch, status, current_mileage, ownership,
         target_consumption_rate, last_service_date, next_service_due,
         minor_service_interval, medium_service_interval, major_service_interval,
         replacement_mileage, replacement_age
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     `, [
-            id, v.reg, `${v.make} ${v.model}`, v.year, v.year,
+            id, companyId, v.reg, `${v.make} ${v.model}`, v.year, v.year,
             v.dept, 'Head Office', v.status, mileage, 'Company Owned',
             8.5, lastService.toISOString().split('T')[0], nextService.toISOString().split('T')[0],
             5000, 15000, 45000, 200000, 5
@@ -246,13 +258,13 @@ const createVehicles = async () => {
 /**
  * Create demo drivers (additional to staff users)
  */
-const createDrivers = async (vehicleIds) => {
+const createDrivers = async (vehicleIds, companyId) => {
     const driverIds = [];
     for (const d of DRIVER_DATA) {
         const id = (0, uuid_1.v4)();
         const staffNo = `DRV${String(Math.floor(Math.random() * 900) + 100).padStart(3, '0')}`;
-        await (0, database_1.query)(`INSERT INTO staff (id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [id, staffNo, d.name, `${staffNo.toLowerCase()}@nextfleet.com`, d.phone,
+        await (0, database_1.query)(`INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [id, companyId, staffNo, d.name, `${staffNo.toLowerCase()}@nextfleet.com`, d.phone,
             'Transport', 'Main Depot', 'Driver', Math.floor(Math.random() * 15) + 85]);
         driverIds.push(id);
         console.log(`✅ Created driver: ${d.name}`);
@@ -262,7 +274,7 @@ const createDrivers = async (vehicleIds) => {
 /**
  * Create fuel transactions
  */
-const createFuelTransactions = async (vehicleIds) => {
+const createFuelTransactions = async (vehicleIds, companyId) => {
     const today = new Date();
     for (let i = 0; i < 15; i++) {
         const vehicleId = vehicleIds[Math.floor(Math.random() * vehicleIds.length)];
@@ -293,7 +305,7 @@ const createFuelTransactions = async (vehicleIds) => {
 /**
  * Create routes/assignments
  */
-const createAssignments = async (vehicleIds, driverIds) => {
+const createAssignments = async (vehicleIds, driverIds, companyId) => {
     const routeIds = [];
     const today = new Date();
     const statuses = ['completed', 'completed', 'completed', 'active', 'pending'];
@@ -328,7 +340,7 @@ const createAssignments = async (vehicleIds, driverIds) => {
 /**
  * Create trips (requisitions)
  */
-const createTrips = async (vehicleIds, driverIds, staffIds) => {
+const createTrips = async (vehicleIds, driverIds, staffIds, companyId) => {
     const today = new Date();
     const statuses = ['completed', 'completed', 'approved'];
     const purposes = ['Client Meeting', 'Delivery', 'Site Inspection', 'Training', 'Emergency Response'];
@@ -368,7 +380,7 @@ const createTrips = async (vehicleIds, driverIds, staffIds) => {
 /**
  * Create inventory items
  */
-const createInventory = async () => {
+const createInventory = async (companyId) => {
     const partIds = [];
     for (const item of INVENTORY_DATA) {
         const id = (0, uuid_1.v4)();
@@ -390,7 +402,7 @@ const createInventory = async () => {
 /**
  * Create suppliers
  */
-const createSuppliers = async () => {
+const createSuppliers = async (companyId) => {
     for (const s of SUPPLIER_DATA) {
         await (0, database_1.query)(`
       INSERT INTO customers (id, customer_name, customer_email, customer_phone, customer_address)
@@ -402,7 +414,7 @@ const createSuppliers = async () => {
 /**
  * Create invoices
  */
-const createInvoices = async (vehicleIds) => {
+const createInvoices = async (vehicleIds, companyId) => {
     const today = new Date();
     for (let i = 0; i < 5; i++) {
         const id = (0, uuid_1.v4)();
@@ -434,7 +446,7 @@ const createInvoices = async (vehicleIds) => {
 /**
  * Create alerts
  */
-const createAlerts = async (vehicleIds, driverIds) => {
+const createAlerts = async (vehicleIds, driverIds, companyId) => {
     const today = new Date();
     for (let i = 0; i < 10; i++) {
         const alert = ALERT_TYPES[i];
@@ -461,7 +473,7 @@ const createAlerts = async (vehicleIds, driverIds) => {
 /**
  * Create documents with expiry dates
  */
-const createDocuments = async (vehicleIds) => {
+const createDocuments = async (vehicleIds, companyId) => {
     const today = new Date();
     for (let i = 0; i < 5; i++) {
         const doc = DOCUMENT_TYPES[i];
@@ -505,28 +517,29 @@ router.get('/', async (req, res) => {
         console.log('🌱 Starting demo data seeding...');
         // 1. Create users
         const createdUsers = await createDemoUsers();
+        const companyId = createdUsers[0].companyId;
         // 2. Create vehicles
-        const vehicleIds = await createVehicles();
+        const vehicleIds = await createVehicles(companyId);
         // 3. Create drivers
-        const driverIds = await createDrivers(vehicleIds);
+        const driverIds = await createDrivers(vehicleIds, companyId);
         const allDriverIds = [...driverIds, ...createdUsers.filter(u => u.role === 'viewer').map(u => u.staffId)];
         const allStaffIds = createdUsers.map(u => u.staffId);
         // 4. Create fuel transactions
-        await createFuelTransactions(vehicleIds);
+        await createFuelTransactions(vehicleIds, companyId);
         // 5. Create assignments/routes
-        const routeIds = await createAssignments(vehicleIds, allDriverIds);
+        const routeIds = await createAssignments(vehicleIds, allDriverIds, companyId);
         // 6. Create trips
-        await createTrips(vehicleIds, allDriverIds, allStaffIds);
+        await createTrips(vehicleIds, allDriverIds, allStaffIds, companyId);
         // 7. Create inventory
-        const partIds = await createInventory();
+        const partIds = await createInventory(companyId);
         // 8. Create suppliers
-        await createSuppliers();
+        await createSuppliers(companyId);
         // 9. Create invoices
-        await createInvoices(vehicleIds);
+        await createInvoices(vehicleIds, companyId);
         // 10. Create alerts
-        await createAlerts(vehicleIds, allDriverIds);
+        await createAlerts(vehicleIds, allDriverIds, companyId);
         // 11. Create documents
-        await createDocuments(vehicleIds);
+        await createDocuments(vehicleIds, companyId);
         console.log('✅ Demo data seeding completed!');
         res.json({
             success: true,
