@@ -5,7 +5,7 @@ import {
   Plus, Search, ChevronLeft, ChevronRight,
   AlertCircle, DollarSign,
   Car, MapPin, Phone, Mail, Star, Edit2, Trash2,
-  History, Bell, Activity
+  History, Bell, Activity, X
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
@@ -168,10 +168,59 @@ export default function MaintenancePage() {
   const [loadingTab, setLoadingTab] = useState(false);
   
   // Modal states
-  const [_showScheduleModal, setShowScheduleModal] = useState(false);
-  const [_showRecordModal, _setShowRecordModal] = useState(false);
-  const [_showProviderModal, setShowProviderModal] = useState(false);
-  const [_showPartModal, setShowPartModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showPartModal, setShowPartModal] = useState(false);
+
+  // Form states
+  const [scheduleForm, setScheduleForm] = useState({
+    vehicleId: '',
+    serviceName: '',
+    scheduleType: 'time_based',
+    serviceType: 'preventive',
+    intervalMonths: 3,
+    intervalMileage: 5000,
+    estimatedCost: 0,
+    priority: 'normal',
+    reminderDaysBefore: 7,
+  });
+  const [recordForm, setRecordForm] = useState({
+    vehicleId: '',
+    title: '',
+    serviceType: 'preventive',
+    category: 'routine',
+    description: '',
+    providerId: '',
+    serviceMileage: 0,
+    totalCost: 0,
+    status: 'completed',
+    isEmergency: false,
+  });
+  const [providerForm, setProviderForm] = useState({
+    name: '',
+    type: 'general',
+    contactPerson: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    country: 'Kenya',
+    specialties: [] as string[],
+    notes: '',
+  });
+  const [partForm, setPartForm] = useState({
+    partNumber: '',
+    name: '',
+    category: '',
+    manufacturer: '',
+    description: '',
+    quantityInStock: 0,
+    reorderLevel: 10,
+    unitCost: 0,
+    locationCode: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -312,6 +361,119 @@ export default function MaintenancePage() {
     }
   };
 
+  // ==================== CREATE HANDLERS ====================
+  const handleCreateSchedule = async () => {
+    try {
+      setSubmitting(true);
+      const response = await api.post('/fleet/maintenance/schedules', scheduleForm);
+      if (response.data?.success) {
+        setShowScheduleModal(false);
+        setScheduleForm({
+          vehicleId: '',
+          serviceName: '',
+          scheduleType: 'time_based',
+          serviceType: 'preventive',
+          intervalMonths: 3,
+          intervalMileage: 5000,
+          estimatedCost: 0,
+          priority: 'normal',
+          reminderDaysBefore: 7,
+        });
+        loadSchedules();
+        loadOverview();
+      }
+    } catch (error) {
+      console.error('Failed to create schedule:', error);
+      alert('Failed to create schedule');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateRecord = async () => {
+    try {
+      setSubmitting(true);
+      const response = await api.post('/fleet/maintenance/records', recordForm);
+      if (response.data?.success) {
+        setShowRecordModal(false);
+        setRecordForm({
+          vehicleId: '',
+          title: '',
+          serviceType: 'preventive',
+          category: 'routine',
+          description: '',
+          providerId: '',
+          serviceMileage: 0,
+          totalCost: 0,
+          status: 'completed',
+          isEmergency: false,
+        });
+        loadRecords();
+        loadOverview();
+      }
+    } catch (error) {
+      console.error('Failed to create record:', error);
+      alert('Failed to create record');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreateProvider = async () => {
+    try {
+      setSubmitting(true);
+      const response = await api.post('/fleet/maintenance/providers', providerForm);
+      if (response.data?.success) {
+        setShowProviderModal(false);
+        setProviderForm({
+          name: '',
+          type: 'general',
+          contactPerson: '',
+          phone: '',
+          email: '',
+          address: '',
+          city: '',
+          country: 'Kenya',
+          specialties: [],
+          notes: '',
+        });
+        loadProviders();
+      }
+    } catch (error) {
+      console.error('Failed to create provider:', error);
+      alert('Failed to create provider');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCreatePart = async () => {
+    try {
+      setSubmitting(true);
+      const response = await api.post('/fleet/maintenance/parts', partForm);
+      if (response.data?.success) {
+        setShowPartModal(false);
+        setPartForm({
+          partNumber: '',
+          name: '',
+          category: '',
+          manufacturer: '',
+          description: '',
+          quantityInStock: 0,
+          reorderLevel: 10,
+          unitCost: 0,
+          locationCode: '',
+        });
+        loadParts();
+      }
+    } catch (error) {
+      console.error('Failed to create part:', error);
+      alert('Failed to create part');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // ==================== HELPER FUNCTIONS ====================
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -384,6 +546,15 @@ export default function MaintenancePage() {
                 >
                   <Plus className="h-5 w-5 mr-2" />
                   Add Schedule
+                </button>
+              )}
+              {activeTab === 'records' && (
+                <button
+                  onClick={() => setShowRecordModal(true)}
+                  className="inline-flex items-center px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 transition-colors"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add Record
                 </button>
               )}
               {activeTab === 'providers' && (
@@ -1041,6 +1212,474 @@ export default function MaintenancePage() {
           </div>
         )}
       </div>
+      {/* Add Schedule Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Add Maintenance Schedule</h3>
+              <button onClick={() => setShowScheduleModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle *</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={scheduleForm.vehicleId}
+                  onChange={(e) => setScheduleForm({...scheduleForm, vehicleId: e.target.value})}
+                >
+                  <option value="">Select Vehicle</option>
+                  {vehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.registration_number} - {v.make} {v.model}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Service Name *</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={scheduleForm.serviceName}
+                  onChange={(e) => setScheduleForm({...scheduleForm, serviceName: e.target.value})}
+                  placeholder="e.g., Oil Change"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Schedule Type</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={scheduleForm.scheduleType}
+                    onChange={(e) => setScheduleForm({...scheduleForm, scheduleType: e.target.value})}
+                  >
+                    <option value="time_based">Time Based</option>
+                    <option value="mileage_based">Mileage Based</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={scheduleForm.serviceType}
+                    onChange={(e) => setScheduleForm({...scheduleForm, serviceType: e.target.value})}
+                  >
+                    <option value="preventive">Preventive</option>
+                    <option value="repair">Repair</option>
+                    <option value="inspection">Inspection</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Interval (Months)</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={scheduleForm.intervalMonths}
+                    onChange={(e) => setScheduleForm({...scheduleForm, intervalMonths: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Interval (Mileage)</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={scheduleForm.intervalMileage}
+                    onChange={(e) => setScheduleForm({...scheduleForm, intervalMileage: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Cost</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={scheduleForm.estimatedCost}
+                  onChange={(e) => setScheduleForm({...scheduleForm, estimatedCost: parseFloat(e.target.value)})}
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSchedule}
+                disabled={submitting || !scheduleForm.vehicleId || !scheduleForm.serviceName}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {submitting ? 'Saving...' : 'Save Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Record Modal */}
+      {showRecordModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Add Maintenance Record</h3>
+              <button onClick={() => setShowRecordModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle *</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={recordForm.vehicleId}
+                  onChange={(e) => setRecordForm({...recordForm, vehicleId: e.target.value})}
+                >
+                  <option value="">Select Vehicle</option>
+                  {vehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.registration_number} - {v.make} {v.model}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={recordForm.title}
+                  onChange={(e) => setRecordForm({...recordForm, title: e.target.value})}
+                  placeholder="e.g., Oil Change Service"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={recordForm.serviceType}
+                    onChange={(e) => setRecordForm({...recordForm, serviceType: e.target.value})}
+                  >
+                    <option value="preventive">Preventive</option>
+                    <option value="repair">Repair</option>
+                    <option value="breakdown">Breakdown</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={recordForm.category}
+                    onChange={(e) => setRecordForm({...recordForm, category: e.target.value})}
+                  >
+                    <option value="routine">Routine</option>
+                    <option value="engine">Engine</option>
+                    <option value="brakes">Brakes</option>
+                    <option value="transmission">Transmission</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  rows={3}
+                  value={recordForm.description}
+                  onChange={(e) => setRecordForm({...recordForm, description: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Mileage</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={recordForm.serviceMileage}
+                    onChange={(e) => setRecordForm({...recordForm, serviceMileage: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Cost</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={recordForm.totalCost}
+                    onChange={(e) => setRecordForm({...recordForm, totalCost: parseFloat(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                  checked={recordForm.isEmergency}
+                  onChange={(e) => setRecordForm({...recordForm, isEmergency: e.target.checked})}
+                />
+                <span className="ml-2 text-sm text-gray-700">Emergency Repair</span>
+              </label>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowRecordModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRecord}
+                disabled={submitting || !recordForm.vehicleId || !recordForm.title}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {submitting ? 'Saving...' : 'Save Record'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Provider Modal */}
+      {showProviderModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Add Service Provider</h3>
+              <button onClick={() => setShowProviderModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Provider Name *</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={providerForm.name}
+                  onChange={(e) => setProviderForm({...providerForm, name: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.type}
+                    onChange={(e) => setProviderForm({...providerForm, type: e.target.value})}
+                  >
+                    <option value="general">General</option>
+                    <option value="specialist">Specialist</option>
+                    <option value="dealership">Dealership</option>
+                    <option value="emergency">Emergency</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.contactPerson}
+                    onChange={(e) => setProviderForm({...providerForm, contactPerson: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.phone}
+                    onChange={(e) => setProviderForm({...providerForm, phone: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.email}
+                    onChange={(e) => setProviderForm({...providerForm, email: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={providerForm.address}
+                  onChange={(e) => setProviderForm({...providerForm, address: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.city}
+                    onChange={(e) => setProviderForm({...providerForm, city: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={providerForm.country}
+                    onChange={(e) => setProviderForm({...providerForm, country: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  rows={2}
+                  value={providerForm.notes}
+                  onChange={(e) => setProviderForm({...providerForm, notes: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowProviderModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateProvider}
+                disabled={submitting || !providerForm.name}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {submitting ? 'Saving...' : 'Save Provider'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Part Modal */}
+      {showPartModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Add Spare Part</h3>
+              <button onClick={() => setShowPartModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Part Number *</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={partForm.partNumber}
+                    onChange={(e) => setPartForm({...partForm, partNumber: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Part Name *</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={partForm.name}
+                    onChange={(e) => setPartForm({...partForm, name: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={partForm.category}
+                  onChange={(e) => setPartForm({...partForm, category: e.target.value})}
+                >
+                  <option value="">Select Category</option>
+                  <option value="Filters">Filters</option>
+                  <option value="Brakes">Brakes</option>
+                  <option value="Engine">Engine</option>
+                  <option value="Transmission">Transmission</option>
+                  <option value="Suspension">Suspension</option>
+                  <option value="Electrical">Electrical</option>
+                  <option value="Body">Body</option>
+                  <option value="Fluids">Fluids</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturer</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={partForm.manufacturer}
+                  onChange={(e) => setPartForm({...partForm, manufacturer: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock Qty</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={partForm.quantityInStock}
+                    onChange={(e) => setPartForm({...partForm, quantityInStock: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={partForm.reorderLevel}
+                    onChange={(e) => setPartForm({...partForm, reorderLevel: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={partForm.unitCost}
+                    onChange={(e) => setPartForm({...partForm, unitCost: parseFloat(e.target.value)})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location Code</label>
+                <input
+                  type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                  value={partForm.locationCode}
+                  onChange={(e) => setPartForm({...partForm, locationCode: e.target.value})}
+                  placeholder="e.g., A-01-02"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowPartModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePart}
+                disabled={submitting || !partForm.partNumber || !partForm.name || !partForm.category}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {submitting ? 'Saving...' : 'Save Part'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </DashboardLayout>
   );
 }
