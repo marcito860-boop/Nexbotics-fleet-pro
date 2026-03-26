@@ -414,9 +414,10 @@ export default function MaintenancePage() {
         loadSchedules();
         loadOverview();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create schedule:', error);
-      alert('Failed to create schedule');
+      const errorMsg = error?.response?.data?.error || error?.response?.data?.details?.[0]?.msg || 'Failed to create schedule';
+      alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
