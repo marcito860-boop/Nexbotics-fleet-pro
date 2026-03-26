@@ -416,8 +416,13 @@ export default function MaintenancePage() {
       }
     } catch (error: any) {
       console.error('Failed to create schedule:', error);
-      const errorMsg = error?.response?.data?.error || error?.response?.data?.details?.[0]?.msg || 'Failed to create schedule';
-      alert(errorMsg);
+      console.error('Error response:', error?.response);
+      console.error('Error response data:', error?.response?.data);
+      const errorMsg = error?.response?.data?.error 
+        || error?.response?.data?.details?.[0]?.msg 
+        || error?.message
+        || 'Failed to create schedule';
+      alert('Error: ' + JSON.stringify(errorMsg));
     } finally {
       setSubmitting(false);
     }
