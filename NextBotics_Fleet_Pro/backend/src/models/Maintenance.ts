@@ -1200,7 +1200,7 @@ export class MaintenanceRecordModel {
           `UPDATE maintenance_schedules 
            SET last_service_date = $1, last_service_mileage = $2,
                next_service_date = CASE WHEN interval_months IS NOT NULL THEN $1 + INTERVAL '1 month' * interval_months ELSE next_service_date END,
-               next_service_mileage = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_mileage END
+               next_service_km = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_km END
            WHERE id = $3`,
           [input.completedDate || new Date(), input.serviceMileage || 0, input.scheduleId]
         );
@@ -1652,16 +1652,16 @@ export class MaintenanceReminderModel {
          ms.id as schedule_id,
          ms.vehicle_id,
          CASE 
-           WHEN ms.next_service_date IS NOT NULL AND ms.next_service_mileage IS NOT NULL THEN 'both'
+           WHEN ms.next_service_date IS NOT NULL AND ms.next_service_km IS NOT NULL THEN 'both'
            WHEN ms.next_service_date IS NOT NULL THEN 'time_due'
            ELSE 'mileage_due'
          END as reminder_type,
-         'Maintenance Due: ' || ms.title as title,
+         'Maintenance Due: ' || ms.service_name as title,
          'Vehicle ' || v.registration_number || ' requires ' || ms.service_type || ' service' as message,
-         ms.next_service_mileage,
+         ms.next_service_km as next_service_mileage,
          ms.next_service_date,
          CASE 
-           WHEN ms.next_service_date < CURRENT_DATE OR ms.next_service_mileage <= v.current_mileage THEN 'critical'
+           WHEN ms.next_service_date < CURRENT_DATE OR ms.next_service_km <= v.current_mileage THEN 'critical'
            WHEN ms.next_service_date <= CURRENT_DATE + INTERVAL '7 days' THEN 'warning'
            ELSE 'info'
          END as severity
@@ -1673,7 +1673,7 @@ export class MaintenanceReminderModel {
          AND mr.id IS NULL
          AND (
            (ms.next_service_date IS NOT NULL AND ms.next_service_date <= CURRENT_DATE + INTERVAL '30 days')
-           OR (ms.next_service_mileage IS NOT NULL AND ms.next_service_mileage <= v.current_mileage + ms.reminder_mileage_before)
+           OR (ms.next_service_km IS NOT NULL AND ms.next_service_km <= v.current_mileage + ms.reminder_mileage_before)
          )`,
       [companyId]
     );
