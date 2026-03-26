@@ -624,7 +624,8 @@ router.post('/records', [
     }
     try {
         const companyId = req.user.companyId;
-        const record = await Maintenance_1.MaintenanceRecordModel.create(companyId, {
+        // Clean up input data
+        const input = {
             vehicleId: req.body.vehicleId,
             scheduleId: req.body.scheduleId,
             serviceType: req.body.serviceType,
@@ -633,9 +634,10 @@ router.post('/records', [
             description: req.body.description,
             providerId: req.body.providerId,
             providerName: req.body.providerName,
-            scheduledDate: req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined,
-            startedDate: req.body.startedDate ? new Date(req.body.startedDate) : undefined,
-            completedDate: req.body.completedDate ? new Date(req.body.completedDate) : undefined,
+            // Convert empty strings to undefined for dates
+            scheduledDate: req.body.scheduledDate && req.body.scheduledDate !== '' ? new Date(req.body.scheduledDate) : undefined,
+            startedDate: req.body.startedDate && req.body.startedDate !== '' ? new Date(req.body.startedDate) : undefined,
+            completedDate: req.body.completedDate && req.body.completedDate !== '' ? new Date(req.body.completedDate) : undefined,
             serviceMileage: req.body.serviceMileage,
             nextServiceMileage: req.body.nextServiceMileage,
             laborCost: req.body.laborCost,
@@ -652,7 +654,8 @@ router.post('/records', [
             documents: req.body.documents,
             notes: req.body.notes,
             parts: req.body.parts,
-        });
+        };
+        const record = await Maintenance_1.MaintenanceRecordModel.create(companyId, input);
         res.status(201).json({ success: true, data: record, message: 'Maintenance record created successfully' });
     }
     catch (error) {
