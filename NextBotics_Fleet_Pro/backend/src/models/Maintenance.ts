@@ -1163,6 +1163,31 @@ export class MaintenanceRecordModel {
 
       const record = recordRows.rows[0];
 
+      // Create job card if external provider is specified
+      if (input.providerId) {
+        const today = new Date();
+        const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
+        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+        const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
+
+        await client.query(
+          `INSERT INTO job_cards (
+            company_id, record_id, provider_id, card_number, status, description,
+            estimated_cost, internal_notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            companyId,
+            record.id,
+            input.providerId,
+            cardNumber,
+            'pending',
+            input.description || null,
+            (input.laborCost || 0) + (input.partsCost || 0) + (input.otherCost || 0),
+            `Auto-created from maintenance record: ${input.title}`,
+          ]
+        );
+      }
+
       // Add parts if provided
       if (input.parts && input.parts.length > 0) {
         for (const part of input.parts) {
@@ -1702,5 +1727,203 @@ export class MaintenanceReminderModel {
       critical: parseInt(rows[0].critical),
       warning: parseInt(rows[0].warning),
     };
+  }
+}
+
+// ==================== Job Card Types ====================
+export interface JobCard {
+  id: string;
+  companyId: string;
+  recordId: string;
+  providerId?: string;
+  cardNumber: string;
+  status: 'pending' | 'sent' | 'in_progress' | 'completed' | 'cancelled';
+  description?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  sentDate?: Date;
+  expectedCompletionDate?: Date;
+  actualCompletionDate?: Date;
+  garageNotes?: string;
+  internalNotes?: string;
+  documents?: any[];
+  createdAt: Date;
+  updatedAt: Date;
+  // Joined fields
+  providerName?: string;
+  vehicleRegistration?: string;
+  serviceTitle?: string;
+}
+
+export interface CreateJobCardInput {
+  recordId: string;
+  providerId?: string;
+  description?: string;
+  estimatedCost?: number;
+  expectedCompletionDate?: Date;
+  internalNotes?: string;
+}
+
+function mapRowToJobCard(row: any): JobCard {
+  return {
+    id: row.id,
+    companyId: row.company_id,
+    recordId: row.record_id,
+    providerId: row.provider_id,
+    cardNumber: row.card_number,
+    status: row.status,
+    description: row.description,
+    estimatedCost: row.estimated_cost ? parseFloat(row.estimated_cost) : undefined,
+    actualCost: row.actual_cost ? parseFloat(row.actual_cost) : undefined,
+    sentDate: row.sent_date ? new Date(row.sent_date) : undefined,
+    expectedCompletionDate: row.expected_completion_date ? new Date(row.expected_completion_date) : undefined,
+    actualCompletionDate: row.actual_completion_date ? new Date(row.actual_completion_date) : undefined,
+    garageNotes: row.garage_notes,
+    internalNotes: row.internal_notes,
+    documents: row.documents,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+    providerName: row.provider_name,
+    vehicleRegistration: row.vehicle_registration,
+    serviceTitle: row.service_title,
+  };
+}
+
+// ==================== Job Card Model ====================
+export class JobCardModel {
+  static async findById(id: string, companyId: string): Promise<JobCard | null> {
+    const rows = await query(
+      `SELECT jc.*, sp.name as provider_name, v.registration_number as vehicle_registration,
+              mr.title as service_title
+       FROM job_cards jc
+       LEFT JOIN service_providers sp ON jc.provider_id = sp.id
+       JOIN maintenance_records mr ON jc.record_id = mr.id
+       JOIN vehicles v ON mr.vehicle_id = v.id
+       WHERE jc.id = $1 AND jc.company_id = $2`,
+      [id, companyId]
+    );
+    return rows.length > 0 ? mapRowToJobCard(rows[0]) : null;
+  }
+
+  static async findByCompany(companyId: string, options?: {
+    status?: string;
+    providerId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ jobCards: JobCard[]; total: number }> {
+    let sql = `
+      SELECT jc.*, sp.name as provider_name, v.registration_number as vehicle_registration,
+             mr.title as service_title
+      FROM job_cards jc
+      LEFT JOIN service_providers sp ON jc.provider_id = sp.id
+      JOIN maintenance_records mr ON jc.record_id = mr.id
+      JOIN vehicles v ON mr.vehicle_id = v.id
+      WHERE jc.company_id = $1`;
+    let countSql = 'SELECT COUNT(*) as total FROM job_cards WHERE company_id = $1';
+    const params: any[] = [companyId];
+
+    if (options?.status) {
+      sql += ` AND jc.status = $${params.length + 1}`;
+      countSql += ` AND status = $${params.length + 1}`;
+      params.push(options.status);
+    }
+
+    if (options?.providerId) {
+      sql += ` AND jc.provider_id = $${params.length + 1}`;
+      countSql += ` AND provider_id = $${params.length + 1}`;
+      params.push(options.providerId);
+    }
+
+    sql += ' ORDER BY jc.created_at DESC';
+
+    if (options?.limit) {
+      sql += ` LIMIT $${params.length + 1}`;
+      params.push(options.limit);
+      if (options?.offset) {
+        sql += ` OFFSET $${params.length + 1}`;
+        params.push(options.offset);
+      }
+    }
+
+    const [cardRows, countRows] = await Promise.all([
+      query(sql, params),
+      query(countSql, params.slice(0, options?.limit ? params.length - (options.offset ? 2 : 1) : params.length))
+    ]);
+
+    return {
+      jobCards: cardRows.map(mapRowToJobCard),
+      total: parseInt(countRows[0].total)
+    };
+  }
+
+  static async create(companyId: string, input: CreateJobCardInput): Promise<JobCard> {
+    // Generate card number: JC-YYYYMMDD-XXXX
+    const today = new Date();
+    const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
+
+    const rows = await query(
+      `INSERT INTO job_cards (
+        company_id, record_id, provider_id, card_number, status, description,
+        estimated_cost, expected_completion_date, internal_notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [
+        companyId,
+        input.recordId,
+        input.providerId || null,
+        cardNumber,
+        'pending',
+        input.description || null,
+        input.estimatedCost || null,
+        input.expectedCompletionDate || null,
+        input.internalNotes || null,
+      ]
+    );
+
+    return this.findById(rows[0].id, companyId) as Promise<JobCard>;
+  }
+
+  static async updateStatus(
+    id: string, 
+    companyId: string, 
+    status: string, 
+    updates?: { sentDate?: Date; actualCompletionDate?: Date; actualCost?: number; garageNotes?: string }
+  ): Promise<JobCard | null> {
+    const setFields: string[] = ['status = $1'];
+    const params: any[] = [status];
+
+    if (updates?.sentDate) {
+      setFields.push(`sent_date = $${params.length + 1}`);
+      params.push(updates.sentDate);
+    }
+
+    if (updates?.actualCompletionDate) {
+      setFields.push(`actual_completion_date = $${params.length + 1}`);
+      params.push(updates.actualCompletionDate);
+    }
+
+    if (updates?.actualCost !== undefined) {
+      setFields.push(`actual_cost = $${params.length + 1}`);
+      params.push(updates.actualCost);
+    }
+
+    if (updates?.garageNotes) {
+      setFields.push(`garage_notes = $${params.length + 1}`);
+      params.push(updates.garageNotes);
+    }
+
+    params.push(id, companyId);
+
+    const rows = await query(
+      `UPDATE job_cards SET ${setFields.join(', ')}, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $${params.length - 1} AND company_id = $${params.length}
+       RETURNING *`,
+      params
+    );
+
+    if (rows.length === 0) return null;
+    return this.findById(rows[0].id, companyId);
   }
 }

@@ -9,6 +9,7 @@ import {
   MaintenanceRecordModel,
   VehicleDowntimeModel,
   MaintenanceReminderModel,
+  JobCardModel,
   ServiceType,
   ScheduleStatus,
   Priority,
@@ -1105,6 +1106,78 @@ router.get('/overview', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Maintenance overview error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch maintenance overview' });
+  }
+});
+
+// ==================== JOB CARDS ====================
+
+// GET /api/fleet/maintenance/job-cards - List job cards
+router.get('/job-cards', async (req: Request, res: Response) => {
+  try {
+    const companyId = req.user!.companyId;
+    const { status, providerId, page = '1', perPage = '20' } = req.query;
+    
+    const result = await JobCardModel.findByCompany(companyId, {
+      status: status as string,
+      providerId: providerId as string,
+      limit: parseInt(perPage as string),
+      offset: (parseInt(page as string) - 1) * parseInt(perPage as string),
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        items: result.jobCards,
+        total: result.total,
+        page: parseInt(page as string),
+        perPage: parseInt(perPage as string),
+        totalPages: Math.ceil(result.total / parseInt(perPage as string)),
+      },
+    });
+  } catch (error) {
+    console.error('List job cards error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch job cards' });
+  }
+});
+
+// GET /api/fleet/maintenance/job-cards/:id - Get job card details
+router.get('/job-cards/:id', async (req: Request, res: Response) => {
+  try {
+    const companyId = req.user!.companyId;
+    const jobCard = await JobCardModel.findById(req.params.id, companyId);
+    
+    if (!jobCard) {
+      return res.status(404).json({ success: false, error: 'Job card not found' });
+    }
+    
+    res.json({ success: true, data: jobCard });
+  } catch (error) {
+    console.error('Get job card error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch job card' });
+  }
+});
+
+// PATCH /api/fleet/maintenance/job-cards/:id/status - Update job card status
+router.patch('/job-cards/:id/status', async (req: Request, res: Response) => {
+  try {
+    const companyId = req.user!.companyId;
+    const { status, sentDate, actualCompletionDate, actualCost, garageNotes } = req.body;
+    
+    const jobCard = await JobCardModel.updateStatus(
+      req.params.id,
+      companyId,
+      status,
+      { sentDate, actualCompletionDate, actualCost, garageNotes }
+    );
+    
+    if (!jobCard) {
+      return res.status(404).json({ success: false, error: 'Job card not found' });
+    }
+    
+    res.json({ success: true, data: jobCard });
+  } catch (error) {
+    console.error('Update job card status error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update job card' });
   }
 });
 
