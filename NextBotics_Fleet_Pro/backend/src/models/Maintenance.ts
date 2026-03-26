@@ -360,7 +360,7 @@ function mapRowToSchedule(row: any): MaintenanceSchedule {
     vehicleId: row.vehicle_id,
     scheduleType: row.schedule_type,
     serviceType: row.service_type,
-    title: row.title,
+    title: row.service_name || row.title,
     description: row.description,
     intervalMileage: row.interval_mileage ? parseInt(row.interval_mileage) : undefined,
     lastServiceMileage: parseFloat(row.last_service_mileage || 0),
@@ -901,7 +901,7 @@ export class MaintenanceScheduleModel {
 
     const rows = await query(
       `INSERT INTO maintenance_schedules (
-        company_id, vehicle_id, schedule_type, service_type, title, description,
+        company_id, vehicle_id, schedule_type, service_type, service_name, description,
         interval_mileage, last_service_mileage, next_service_mileage,
         interval_months, last_service_date, next_service_date,
         estimated_cost, estimated_duration_hours, assigned_provider_id,

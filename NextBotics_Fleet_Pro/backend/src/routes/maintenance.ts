@@ -1060,6 +1060,12 @@ router.get('/overview', async (req: Request, res: Response) => {
   try {
     const companyId = req.user!.companyId;
 
+    // Get vehicles with maintenance status first
+    const vehiclesResult = await query(
+      'SELECT id, registration_number, make, model, year, status FROM vehicles WHERE company_id = $1 AND status = $2',
+      [companyId, 'maintenance']
+    );
+
     // Fetch all stats in parallel
     const [
       scheduleStats,
@@ -1070,7 +1076,6 @@ router.get('/overview', async (req: Request, res: Response) => {
       overdueSchedules,
       activeDowntime,
       activeRepairs,
-      vehiclesUnderMaintenance
     ] = await Promise.all([
       MaintenanceScheduleModel.getStats(companyId),
       MaintenanceRecordModel.getStats(companyId),
@@ -1081,8 +1086,6 @@ router.get('/overview', async (req: Request, res: Response) => {
       VehicleDowntimeModel.findByCompany(companyId, { active: true, limit: 5 }),
       // Get active repairs (in_progress status)
       MaintenanceRecordModel.findByCompany(companyId, { status: 'in_progress', limit: 10 }),
-      // Get vehicles with maintenance status
-      query('SELECT id, registration_number, make, model, year, status FROM vehicles WHERE company_id = $1 AND status = $2', [companyId, 'maintenance'])
     ]);
 
     res.json({
@@ -1096,7 +1099,7 @@ router.get('/overview', async (req: Request, res: Response) => {
         overdueSchedules: overdueSchedules.schedules,
         activeDowntime: activeDowntime.downtimes,
         activeRepairs: activeRepairs.records,
-        vehiclesUnderMaintenance: vehiclesUnderMaintenance
+        vehiclesUnderMaintenance: vehiclesResult
       }
     });
   } catch (error) {
