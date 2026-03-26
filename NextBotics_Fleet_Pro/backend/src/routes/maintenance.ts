@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { body, param, query as queryValidator, validationResult } from 'express-validator';
 import { authMiddleware, requireRole } from '../utils/auth';
+import { query } from '../database';
 import {
   ServiceProviderModel,
   SparePartModel,
@@ -1067,7 +1068,9 @@ router.get('/overview', async (req: Request, res: Response) => {
       downtimeStats,
       lowStockParts,
       overdueSchedules,
-      activeDowntime
+      activeDowntime,
+      activeRepairs,
+      vehiclesUnderMaintenance
     ] = await Promise.all([
       MaintenanceScheduleModel.getStats(companyId),
       MaintenanceRecordModel.getStats(companyId),
@@ -1076,6 +1079,10 @@ router.get('/overview', async (req: Request, res: Response) => {
       SparePartModel.findByCompany(companyId, { lowStockOnly: true, limit: 5 }),
       MaintenanceScheduleModel.findByCompany(companyId, { overdue: true, limit: 5 }),
       VehicleDowntimeModel.findByCompany(companyId, { active: true, limit: 5 }),
+      // Get active repairs (in_progress status)
+      MaintenanceRecordModel.findByCompany(companyId, { status: 'in_progress', limit: 10 }),
+      // Get vehicles with maintenance status
+      query('SELECT id, registration_number, make, model, year, status FROM vehicles WHERE company_id = $1 AND status = $2', [companyId, 'maintenance'])
     ]);
 
     res.json({
@@ -1088,6 +1095,8 @@ router.get('/overview', async (req: Request, res: Response) => {
         lowStockParts: lowStockParts.parts,
         overdueSchedules: overdueSchedules.schedules,
         activeDowntime: activeDowntime.downtimes,
+        activeRepairs: activeRepairs.records,
+        vehiclesUnderMaintenance: vehiclesUnderMaintenance.rows
       }
     });
   } catch (error) {

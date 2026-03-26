@@ -162,6 +162,8 @@ export default function MaintenancePage() {
   const [_reminders, setReminders] = useState<MaintenanceReminder[]>([]);
   const [downtime, setDowntime] = useState<VehicleDowntime[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehiclesUnderMaintenance, setVehiclesUnderMaintenance] = useState<Vehicle[]>([]);
+  const [activeRepairs, setActiveRepairs] = useState<MaintenanceRecord[]>([]);
   
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -192,10 +194,18 @@ export default function MaintenancePage() {
     category: 'routine',
     description: '',
     providerId: '',
+    providerName: '',
     serviceMileage: 0,
+    laborCost: 0,
+    partsCost: 0,
+    otherCost: 0,
     totalCost: 0,
     status: 'completed',
     isEmergency: false,
+    technicianName: '',
+    isInternalGarage: false,
+    startedDate: '',
+    completedDate: '',
   });
   const [providerForm, setProviderForm] = useState({
     name: '',
@@ -261,6 +271,8 @@ export default function MaintenancePage() {
         });
         setReminders(data.reminders?.items || []);
         setDowntime(data.activeDowntime || []);
+        setVehiclesUnderMaintenance(data.vehiclesUnderMaintenance || []);
+        setActiveRepairs(data.activeRepairs || []);
       }
     } catch (error) {
       console.error('Failed to load overview:', error);
@@ -393,7 +405,11 @@ export default function MaintenancePage() {
   const handleCreateRecord = async () => {
     try {
       setSubmitting(true);
-      const response = await api.post('/fleet/maintenance/records', recordForm);
+      // Calculate total cost
+      const totalCost = (recordForm.laborCost || 0) + (recordForm.partsCost || 0) + (recordForm.otherCost || 0);
+      const formData = { ...recordForm, totalCost };
+      
+      const response = await api.post('/fleet/maintenance/records', formData);
       if (response.data?.success) {
         setShowRecordModal(false);
         setRecordForm({
@@ -403,10 +419,18 @@ export default function MaintenancePage() {
           category: 'routine',
           description: '',
           providerId: '',
+          providerName: '',
           serviceMileage: 0,
+          laborCost: 0,
+          partsCost: 0,
+          otherCost: 0,
           totalCost: 0,
           status: 'completed',
           isEmergency: false,
+          technicianName: '',
+          isInternalGarage: false,
+          startedDate: '',
+          completedDate: '',
         });
         loadRecords();
         loadOverview();
@@ -645,6 +669,77 @@ export default function MaintenancePage() {
                 color="blue"
               />
             </div>
+
+            {/* Vehicles Under Maintenance */}
+            {(vehiclesUnderMaintenance.length > 0 || activeRepairs.length > 0) && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                    <Wrench className="h-5 w-5 mr-2 text-orange-500" />
+                    Vehicles Currently Under Maintenance / Repair
+                  </h3>
+                  <span className="px-3 py-1 text-sm font-medium rounded-full bg-orange-100 text-orange-700">
+                    {vehiclesUnderMaintenance.length + activeRepairs.length} Active
+                  </span>
+                </div>                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {vehiclesUnderMaintenance.map((vehicle) => (
+                      <div key={vehicle.id} className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <Car className="h-8 w-8 text-orange-500 mr-3" />
+                            <div>
+                              <p className="font-semibold text-gray-900">{vehicle.registration_number}</p>
+                              <p className="text-sm text-gray-600">{vehicle.make} {vehicle.model} {vehicle.year && `(${vehicle.year})`}</p>
+                            </div>
+                          </div>
+                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                            In Garage
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {activeRepairs.map((repair) => (
+                      <div key={repair.id} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center">
+                            <Wrench className="h-8 w-8 text-blue-500 mr-3" />
+                            <div>
+                              <p className="font-semibold text-gray-900">{repair.vehicleRegistration || repair.vehicleId}</p>
+                              <p className="text-sm text-gray-600">{repair.title}</p>
+                            </div>
+                          </div>
+                          <span className={cn(
+                            "px-3 py-1 text-xs font-medium rounded-full",
+                            repair.isEmergency ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"
+                          )}>
+                            {repair.isEmergency ? "🔴 Emergency" : "🔧 In Progress"}
+                          </span>
+                        </div>                        <div className="mt-3 pt-3 border-t border-blue-200">
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <p className="text-gray-500">Labor</p>
+                              <p className="font-medium">{formatCurrency(repair.laborCost || 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Parts</p>
+                              <p className="font-medium">{formatCurrency(repair.partsCost || 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Total</p>
+                              <p className="font-bold text-blue-600">{formatCurrency(repair.totalCost || 0)}</p>
+                            </div>
+                          </div>                          {repair.technicianName && (
+                            <p className="text-sm text-gray-600 mt-2">
+                              <span className="text-gray-500">Technician: </span>{repair.technicianName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>                </div>
+              </div>
+            )}
 
             {/* Two Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1403,15 +1498,134 @@ export default function MaintenancePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Total Cost</label>
-                  <input
-                    type="number"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
-                    value={recordForm.totalCost}
-                    onChange={(e) => setRecordForm({...recordForm, totalCost: parseFloat(e.target.value)})}
-                  />
+                    value={recordForm.status}
+                    onChange={(e) => setRecordForm({...recordForm, status: e.target.value})}
+                  >
+                    <option value="scheduled">Scheduled</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
               </div>
+
+              {/* Cost Breakdown */}
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Cost Breakdown</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Labor Cost</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                      value={recordForm.laborCost}
+                      onChange={(e) => setRecordForm({...recordForm, laborCost: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Parts Cost</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                      value={recordForm.partsCost}
+                      onChange={(e) => setRecordForm({...recordForm, partsCost: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Other Cost</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                      value={recordForm.otherCost}
+                      onChange={(e) => setRecordForm({...recordForm, otherCost: parseFloat(e.target.value)})}
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    Total Cost: <span className="font-bold text-gray-900">{formatCurrency((recordForm.laborCost || 0) + (recordForm.partsCost || 0) + (recordForm.otherCost || 0))}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Internal Garage / Provider */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-900">Service Provider</h4>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                      checked={recordForm.isInternalGarage}
+                      onChange={(e) => setRecordForm({...recordForm, isInternalGarage: e.target.checked, providerId: '', providerName: ''})}
+                    />
+                    <span className="ml-2 text-sm text-gray-700">Internal Garage (G4S)</span>
+                  </label>
+                </div>
+                
+                {!recordForm.isInternalGarage ? (
+                  <select
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    value={recordForm.providerId}
+                    onChange={(e) => {
+                      const provider = providers.find(p => p.id === e.target.value);
+                      setRecordForm({...recordForm, providerId: e.target.value, providerName: provider?.name || ''});
+                    }}
+                  >
+                    <option value="">Select External Provider</option>
+                    {providers.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-gray-100 text-gray-600"
+                    value="G4S Internal Garage"
+                    disabled
+                  />
+                )}
+              </div>
+
+              {/* Technician & Dates */}
+              <div className="border-t border-gray-200 pt-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Work Details</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Technician Name</label>
+                    <input
+                      type="text"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                      value={recordForm.technicianName}
+                      onChange={(e) => setRecordForm({...recordForm, technicianName: e.target.value})}
+                      placeholder={recordForm.isInternalGarage ? "e.g., G4S Mechanic John" : "External technician name"}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Started Date</label>
+                      <input
+                        type="date"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                        value={recordForm.startedDate}
+                        onChange={(e) => setRecordForm({...recordForm, startedDate: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Completed Date</label>
+                      <input
+                        type="date"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                        value={recordForm.completedDate}
+                        onChange={(e) => setRecordForm({...recordForm, completedDate: e.target.value})}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <label className="flex items-center">
                 <input
                   type="checkbox"
