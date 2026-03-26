@@ -35,6 +35,7 @@ import workshopRoutes from './routes/workshop';
 import riskIntelligenceRoutes from './routes/riskIntelligence';
 import photoRoutes from './routes/photos';
 import webhookRoutes from './routes/webhooks';
+import inspectionRoutes from './routes/inspections';
 import apiV1Routes from './routes/api/v1';
 import seedDemoRoutes from './routes/seed-demo';
 
@@ -208,6 +209,9 @@ app.use('/api/photos', authenticateToken, photoRoutes);
 
 // Webhook management routes
 app.use('/api/webhooks', authenticateToken, webhookRoutes);
+
+// Vehicle Inspection routes
+app.use('/api/inspections', authenticateToken, inspectionRoutes);
 
 // REST API v1 (with API key auth support)
 app.use('/api/v1', apiV1Routes);

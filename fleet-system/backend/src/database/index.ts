@@ -1372,6 +1372,9 @@ export const runMigrations = async () => {
   
   console.log('🔧 Running additional migrations...');
   
+  // Run inspection module migration
+  await runInspectionMigration(pool);
+  
   // Add deleted_at to staff table for consistency
   try {
     await pool.query(`
@@ -1453,6 +1456,41 @@ export const runMigrations = async () => {
     }
   }
   console.log('✅ Company ID columns added for multi-tenant support');
+};
+
+// Run inspection module migration
+const runInspectionMigration = async (pool: Pool) => {
+  console.log('🔧 Running inspection module migration...');
+  
+  try {
+    // Check if inspection tables already exist
+    const tableCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'vehicle_inspections'
+      )
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      console.log('✅ Inspection tables already exist, skipping migration');
+      return;
+    }
+    
+    // Read and execute the migration SQL
+    const fs = await import('fs');
+    const path = await import('path');
+    const migrationPath = path.join(__dirname, '../../database/migrations_20250324_inspection_module.sql');
+    
+    if (fs.existsSync(migrationPath)) {
+      const sql = fs.readFileSync(migrationPath, 'utf8');
+      await pool.query(sql);
+      console.log('✅ Inspection module migration completed');
+    } else {
+      console.log('⚠️ Inspection migration file not found, skipping');
+    }
+  } catch (err: any) {
+    console.error('❌ Inspection migration failed:', err.message);
+  }
 };
 
 export const query = async (sql: string, params?: any[]): Promise<any> => {
