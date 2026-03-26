@@ -113,6 +113,15 @@ interface VehicleDowntime {
   impact?: string;
 }
 
+interface Vehicle {
+  id: string;
+  registration_number: string;
+  make: string;
+  model: string;
+  year?: number;
+  status: string;
+}
+
 interface MaintenanceStats {
   schedules: {
     total: number;
@@ -152,6 +161,7 @@ export default function MaintenancePage() {
   const [parts, setParts] = useState<SparePart[]>([]);
   const [_reminders, setReminders] = useState<MaintenanceReminder[]>([]);
   const [downtime, setDowntime] = useState<VehicleDowntime[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   
   // Loading states
   const [loading, setLoading] = useState(true);
@@ -177,6 +187,7 @@ export default function MaintenancePage() {
       return;
     }
     loadOverview();
+    loadVehicles();
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
@@ -287,6 +298,17 @@ export default function MaintenancePage() {
       console.error('Failed to load parts:', error);
     } finally {
       setLoadingTab(false);
+    }
+  };
+
+  const loadVehicles = async () => {
+    try {
+      const response = await api.get('/fleet/vehicles?perPage=100');
+      if (response.data?.success) {
+        setVehicles(response.data.data.items || []);
+      }
+    } catch (error) {
+      console.error('Failed to load vehicles:', error);
     }
   };
 
