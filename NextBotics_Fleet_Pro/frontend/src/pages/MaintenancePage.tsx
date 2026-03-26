@@ -377,7 +377,20 @@ export default function MaintenancePage() {
   const handleCreateSchedule = async () => {
     try {
       setSubmitting(true);
-      const response = await api.post('/fleet/maintenance/schedules', scheduleForm);
+      // Map frontend field names to backend field names
+      const payload = {
+        vehicleId: scheduleForm.vehicleId,
+        title: scheduleForm.serviceName,  // Map serviceName to title
+        scheduleType: scheduleForm.scheduleType,
+        serviceType: scheduleForm.serviceType,
+        intervalMonths: scheduleForm.intervalMonths,
+        intervalMileage: scheduleForm.intervalMileage,
+        estimatedCost: scheduleForm.estimatedCost,
+        priority: scheduleForm.priority,
+        reminderDaysBefore: scheduleForm.reminderDaysBefore,
+      };
+      
+      const response = await api.post('/fleet/maintenance/schedules', payload);
       if (response.data?.success) {
         setShowScheduleModal(false);
         setScheduleForm({
