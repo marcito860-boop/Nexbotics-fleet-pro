@@ -397,7 +397,10 @@ export default function MaintenancePage() {
         reminderDaysBefore: scheduleForm.reminderDaysBefore,
       };
       
+      console.log('Creating schedule with payload:', payload);
+      
       const response = await api.post('/fleet/maintenance/schedules', payload);
+      console.log('Schedule created:', response.data);
       if (response.data?.success) {
         setShowScheduleModal(false);
         setScheduleForm({
