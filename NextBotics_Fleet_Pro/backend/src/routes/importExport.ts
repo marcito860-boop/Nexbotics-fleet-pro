@@ -41,6 +41,9 @@ router.post('/preview', requireRole(['admin', 'manager']), async (req: Request, 
         case 'inventory':
           rowErrors = ImportExportModel.validateInventoryRow(rows[i], i);
           break;
+        case 'maintenance_records':
+          rowErrors = ImportExportModel.validateMaintenanceRecordRow(rows[i], i);
+          break;
         default:
           return res.status(400).json({ success: false, error: 'Invalid import type' });
       }
@@ -214,6 +217,12 @@ router.get('/templates/:type', async (req: Request, res: Response) => {
                    'current_stock', 'reorder_level', 'reorder_quantity', 'supplier_name', 
                    'supplier_contact', 'location'];
         break;
+      case 'maintenance_records':
+        headers = ['vehicle_registration', 'service_type', 'category', 'title', 'description',
+                   'provider_name', 'scheduled_date', 'completed_date', 'service_mileage',
+                   'next_service_mileage', 'labor_cost', 'parts_cost', 'other_cost',
+                   'status', 'technician_name', 'invoice_number', 'warranty_months', 'notes'];
+        break;
       default:
         return res.status(400).json({ success: false, error: 'Invalid template type' });
     }
@@ -266,6 +275,9 @@ async function processImportJob(
             case 'inventory':
               rowErrors = ImportExportModel.validateInventoryRow(row, i);
               break;
+            case 'maintenance_records':
+              rowErrors = ImportExportModel.validateMaintenanceRecordRow(row, i);
+              break;
           }
         }
 
@@ -285,6 +297,9 @@ async function processImportJob(
             break;
           case 'inventory':
             await importInventoryItem(companyId, userId, row);
+            break;
+          case 'maintenance_records':
+            await importMaintenanceRecord(companyId, row);
             break;
         }
 
@@ -431,6 +446,81 @@ async function importInventoryItem(companyId: string, userId: string, row: any) 
   }
 }
 
+async function importMaintenanceRecord(companyId: string, row: any) {
+  // Look up vehicle by registration number
+  const vehicleRows = await query(
+    'SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2',
+    [row.vehicle_registration, companyId]
+  );
+
+  if (vehicleRows.length === 0) {
+    throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+  }
+
+  const vehicleId = vehicleRows[0].id;
+
+  // Calculate warranty expiry if provided
+  let warrantyExpiry = null;
+  if (row.warranty_months && row.completed_date) {
+    warrantyExpiry = new Date(row.completed_date);
+    warrantyExpiry.setMonth(warrantyExpiry.getMonth() + parseInt(row.warranty_months));
+  }
+
+  // Look up provider by name if provided
+  let providerId = null;
+  if (row.provider_name) {
+    const providerRows = await query(
+      'SELECT id FROM service_providers WHERE name = $1 AND company_id = $2',
+      [row.provider_name, companyId]
+    );
+    if (providerRows.length > 0) {
+      providerId = providerRows[0].id;
+    }
+  }
+
+  // Insert maintenance record
+  const recordResult = await query(
+    `INSERT INTO maintenance_records (
+      company_id, vehicle_id, service_type, category, title, description,
+      provider_id, provider_name, scheduled_date, completed_date,
+      service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
+      status, technician_name, warranty_months, warranty_expiry, invoice_number, notes
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+    RETURNING id`,
+    [
+      companyId,
+      vehicleId,
+      row.service_type?.toLowerCase() || 'preventive',
+      row.category,
+      row.title,
+      row.description || null,
+      providerId,
+      row.provider_name || null,
+      row.scheduled_date || null,
+      row.completed_date || null,
+      row.service_mileage ? parseFloat(row.service_mileage) : null,
+      row.next_service_mileage ? parseFloat(row.next_service_mileage) : null,
+      row.labor_cost ? parseFloat(row.labor_cost) : 0,
+      row.parts_cost ? parseFloat(row.parts_cost) : 0,
+      row.other_cost ? parseFloat(row.other_cost) : 0,
+      row.status?.toLowerCase() || 'completed',
+      row.technician_name || null,
+      row.warranty_months ? parseInt(row.warranty_months) : null,
+      warrantyExpiry,
+      row.invoice_number || null,
+      row.notes || null,
+    ]
+  );
+
+  // If completed, update vehicle mileage
+  if (row.completed_date && row.service_mileage) {
+    await query(
+      'UPDATE vehicles SET current_mileage = $1, last_service_date = $2, updated_at = NOW() WHERE id = $3',
+      [parseFloat(row.service_mileage), row.completed_date, vehicleId]
+    );
+  }
+}
+
 async function processExportJob(
   jobId: string,
   companyId: string,
@@ -471,6 +561,18 @@ async function processExportJob(
         );
         data = items;
         headers = ['sku', 'name', 'category_name', 'current_stock', 'unit_price'];
+        break;
+      case 'maintenance_records':
+        const records = await query(
+          `SELECT mr.*, v.registration_number as vehicle_registration
+           FROM maintenance_records mr
+           JOIN vehicles v ON mr.vehicle_id = v.id
+           WHERE mr.company_id = $1 ORDER BY mr.created_at DESC`,
+          [companyId]
+        );
+        data = records;
+        headers = ['vehicle_registration', 'service_type', 'category', 'title', 'completed_date', 
+                   'service_mileage', 'total_cost', 'status', 'technician_name'];
         break;
       default:
         throw new Error('Invalid export type');

@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 export interface ImportJob {
   id: string;
   companyId: string;
-  importType: 'vehicles' | 'drivers' | 'inventory' | 'requisitions' | 'audits' | 'invoices';
+  importType: 'vehicles' | 'drivers' | 'inventory' | 'requisitions' | 'audits' | 'invoices' | 'maintenance_records';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   fileName: string;
   totalRows: number;
@@ -300,6 +300,45 @@ export class ImportExportModel {
     }
     if (row.unit_price && isNaN(parseFloat(row.unit_price))) {
       errors.push({ row: index + 2, field: 'unit_price', value: row.unit_price, message: 'Unit price must be a number' });
+    }
+
+    return errors;
+  }
+
+  static validateMaintenanceRecordRow(row: any, index: number): ImportError[] {
+    const errors: ImportError[] = [];
+
+    if (!row.vehicle_registration?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    }
+    if (!row.service_type?.trim()) {
+      errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type is required (preventive, repair, breakdown, emergency)' });
+    } else {
+      const validTypes = ['preventive', 'repair', 'breakdown', 'emergency'];
+      if (!validTypes.includes(row.service_type.toLowerCase())) {
+        errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type must be: preventive, repair, breakdown, or emergency' });
+      }
+    }
+    if (!row.category?.trim()) {
+      errors.push({ row: index + 2, field: 'category', value: row.category, message: 'Category is required' });
+    }
+    if (!row.title?.trim()) {
+      errors.push({ row: index + 2, field: 'title', value: row.title, message: 'Title is required' });
+    }
+    if (row.scheduled_date && !this.isValidDate(row.scheduled_date)) {
+      errors.push({ row: index + 2, field: 'scheduled_date', value: row.scheduled_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+    }
+    if (row.completed_date && !this.isValidDate(row.completed_date)) {
+      errors.push({ row: index + 2, field: 'completed_date', value: row.completed_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+    }
+    if (row.service_mileage && isNaN(parseFloat(row.service_mileage))) {
+      errors.push({ row: index + 2, field: 'service_mileage', value: row.service_mileage, message: 'Service mileage must be a number' });
+    }
+    if (row.labor_cost && isNaN(parseFloat(row.labor_cost))) {
+      errors.push({ row: index + 2, field: 'labor_cost', value: row.labor_cost, message: 'Labor cost must be a number' });
+    }
+    if (row.parts_cost && isNaN(parseFloat(row.parts_cost))) {
+      errors.push({ row: index + 2, field: 'parts_cost', value: row.parts_cost, message: 'Parts cost must be a number' });
     }
 
     return errors;
