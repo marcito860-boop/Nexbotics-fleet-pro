@@ -450,7 +450,7 @@ function mapRowToDowntime(row: any): VehicleDowntime {
     startTime: row.start_time,
     endTime: row.end_time,
     durationHours: row.duration_hours ? parseFloat(row.duration_hours) : undefined,
-    durationDays: row.duration_days ? parseInt(row.duration_days) : undefined,
+    durationDays: row.duration_hours ? Math.ceil(parseFloat(row.duration_hours) / 24) : undefined,
     reason: row.reason,
     impact: row.impact,
     replacementVehicleId: row.replacement_vehicle_id,
@@ -1478,9 +1478,9 @@ export class VehicleDowntimeModel {
   }> {
     let sql = `
       SELECT 
-        COALESCE(SUM(duration_days), 0) as total_days,
+        COALESCE(SUM(COALESCE(duration_hours, 0) / 24.0), 0) as total_days,
         COUNT(CASE WHEN end_date IS NULL THEN 1 END) as active_count,
-        COALESCE(AVG(duration_days), 0) as avg_duration,
+        COALESCE(AVG(COALESCE(duration_hours, 0) / 24.0), 0) as avg_duration,
         downtime_type,
         COUNT(*) as type_count
        FROM vehicle_downtime WHERE company_id = $1`;
@@ -1506,7 +1506,7 @@ export class VehicleDowntimeModel {
     });
 
     return {
-      totalDowntimeDays: rows.length > 0 ? parseInt(rows[0].total_days) : 0,
+      totalDowntimeDays: rows.length > 0 ? parseFloat(rows[0].total_days) : 0,
       activeDowntimeCount: rows.length > 0 ? parseInt(rows[0].active_count) : 0,
       averageDurationDays: rows.length > 0 ? parseFloat(rows[0].avg_duration) : 0,
       downtimeByType,
@@ -1519,7 +1519,7 @@ export class MaintenanceReminderModel {
   static async findById(id: string, companyId: string): Promise<MaintenanceReminder | null> {
     const rows = await query(
       `SELECT mr.*, v.registration_number as vehicle_registration, v.make as vehicle_make, v.model as vehicle_model,
-              ms.title as schedule_title
+              ms.service_name as schedule_title
        FROM maintenance_reminders mr
        JOIN vehicles v ON mr.vehicle_id = v.id
        LEFT JOIN maintenance_schedules ms ON mr.schedule_id = ms.id
@@ -1539,7 +1539,7 @@ export class MaintenanceReminderModel {
   }): Promise<{ reminders: MaintenanceReminder[]; total: number }> {
     let sql = `
       SELECT mr.*, v.registration_number as vehicle_registration, v.make as vehicle_make, v.model as vehicle_model,
-             ms.title as schedule_title
+             ms.service_name as schedule_title
       FROM maintenance_reminders mr
       JOIN vehicles v ON mr.vehicle_id = v.id
       LEFT JOIN maintenance_schedules ms ON mr.schedule_id = ms.id
