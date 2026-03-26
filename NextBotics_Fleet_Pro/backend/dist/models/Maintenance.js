@@ -699,86 +699,112 @@ class MaintenanceRecordModel {
                 warrantyExpiry.setMonth(warrantyExpiry.getMonth() + input.warrantyMonths);
             }
             // Create record
-            const recordRows = await client.query(`INSERT INTO maintenance_records (
-          company_id, vehicle_id, schedule_id, service_type, category, title, description,
-          provider_id, scheduled_date, started_date, completed_date,
-          service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
-          status, breakdown_location, breakdown_cause, is_emergency,
-          technician_name, driver_id, warranty_months, warranty_expiry,
-          invoice_number, documents, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
-        RETURNING *`, [
-                companyId,
-                input.vehicleId,
-                input.scheduleId || null,
-                input.serviceType,
-                input.category,
-                input.title,
-                input.description || null,
-                input.providerId || null,
-                input.scheduledDate || null,
-                input.startedDate || null,
-                input.completedDate || null,
-                input.serviceMileage || null,
-                input.nextServiceMileage || null,
-                input.laborCost || 0,
-                input.partsCost || 0,
-                input.otherCost || 0,
-                input.status || 'scheduled',
-                input.breakdownLocation || null,
-                input.breakdownCause || null,
-                input.isEmergency || false,
-                input.technicianName || null,
-                input.driverId || null,
-                input.warrantyMonths || null,
-                warrantyExpiry || null,
-                input.invoiceNumber || null,
-                input.documents ? JSON.stringify(input.documents) : null,
-                input.notes || null,
-            ]);
-            const record = recordRows.rows[0];
+            let record;
+            try {
+                const recordRows = await client.query(`INSERT INTO maintenance_records (
+            company_id, vehicle_id, schedule_id, service_type, category, title, description,
+            provider_id, scheduled_date, started_date, completed_date,
+            service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
+            status, breakdown_location, breakdown_cause, is_emergency,
+            technician_name, driver_id, warranty_months, warranty_expiry,
+            invoice_number, documents, notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+          RETURNING *`, [
+                    companyId,
+                    input.vehicleId,
+                    input.scheduleId || null,
+                    input.serviceType,
+                    input.category,
+                    input.title,
+                    input.description || null,
+                    input.providerId || null,
+                    input.scheduledDate || null,
+                    input.startedDate || null,
+                    input.completedDate || null,
+                    input.serviceMileage || null,
+                    input.nextServiceMileage || null,
+                    input.laborCost || 0,
+                    input.partsCost || 0,
+                    input.otherCost || 0,
+                    input.status || 'scheduled',
+                    input.breakdownLocation || null,
+                    input.breakdownCause || null,
+                    input.isEmergency || false,
+                    input.technicianName || null,
+                    input.driverId || null,
+                    input.warrantyMonths || null,
+                    warrantyExpiry || null,
+                    input.invoiceNumber || null,
+                    input.documents ? JSON.stringify(input.documents) : null,
+                    input.notes || null,
+                ]);
+                record = recordRows.rows[0];
+            }
+            catch (err) {
+                throw new Error(`Failed to insert maintenance record: ${err.message}`);
+            }
             // Create job card if external provider is specified
             if (input.providerId) {
-                const today = new Date();
-                const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
-                const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-                const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
-                await client.query(`INSERT INTO job_cards (
-            company_id, record_id, provider_id, card_number, status, description,
-            estimated_cost, internal_notes
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
-                    companyId,
-                    record.id,
-                    input.providerId,
-                    cardNumber,
-                    'pending',
-                    input.description || null,
-                    (input.laborCost || 0) + (input.partsCost || 0) + (input.otherCost || 0),
-                    `Auto-created from maintenance record: ${input.title}`,
-                ]);
+                try {
+                    const today = new Date();
+                    const datePrefix = today.toISOString().slice(0, 10).replace(/-/g, '');
+                    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+                    const cardNumber = `JC-${datePrefix}-${randomSuffix}`;
+                    await client.query(`INSERT INTO job_cards (
+              company_id, record_id, provider_id, card_number, status, description,
+              estimated_cost, internal_notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
+                        companyId,
+                        record.id,
+                        input.providerId,
+                        cardNumber,
+                        'pending',
+                        input.description || null,
+                        (input.laborCost || 0) + (input.partsCost || 0) + (input.otherCost || 0),
+                        `Auto-created from maintenance record: ${input.title}`,
+                    ]);
+                }
+                catch (err) {
+                    throw new Error(`Failed to create job card: ${err.message}`);
+                }
             }
             // Add parts if provided
             if (input.parts && input.parts.length > 0) {
                 for (const part of input.parts) {
-                    await client.query(`INSERT INTO maintenance_parts (record_id, part_id, part_number, part_name, quantity, unit_cost)
-             VALUES ($1, $2, $3, $4, $5, $6)`, [record.id, part.partId || null, part.partNumber, part.partName, part.quantity, part.unitCost]);
-                    // Update stock if partId provided
-                    if (part.partId) {
-                        await client.query('UPDATE spare_parts SET quantity_in_stock = quantity_in_stock - $1 WHERE id = $2', [part.quantity, part.partId]);
+                    try {
+                        await client.query(`INSERT INTO maintenance_parts (record_id, part_id, part_number, part_name, quantity, unit_cost)
+               VALUES ($1, $2, $3, $4, $5, $6)`, [record.id, part.partId || null, part.partNumber, part.partName, part.quantity, part.unitCost]);
+                        // Update stock if partId provided
+                        if (part.partId) {
+                            await client.query('UPDATE spare_parts SET quantity_in_stock = quantity_in_stock - $1 WHERE id = $2', [part.quantity, part.partId]);
+                        }
+                    }
+                    catch (err) {
+                        throw new Error(`Failed to add part ${part.partNumber}: ${err.message}`);
                     }
                 }
             }
             // Update vehicle mileage if service completed
             if (input.status === 'completed' && input.serviceMileage) {
-                await client.query('UPDATE vehicles SET current_mileage = $1, last_service_date = $2 WHERE id = $3', [input.serviceMileage, input.completedDate || new Date(), input.vehicleId]);
+                try {
+                    await client.query('UPDATE vehicles SET current_mileage = $1, last_service_date = $2 WHERE id = $3', [input.serviceMileage, input.completedDate || new Date(), input.vehicleId]);
+                }
+                catch (err) {
+                    throw new Error(`Failed to update vehicle mileage: ${err.message}`);
+                }
             }
             // Update schedule if linked
             if (input.scheduleId && input.status === 'completed') {
-                await client.query(`UPDATE maintenance_schedules 
-           SET last_service_date = $1, last_service_mileage = $2,
-               next_service_date = CASE WHEN interval_months IS NOT NULL THEN $1 + INTERVAL '1 month' * interval_months ELSE next_service_date END,
-               next_service_km = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_km END
-           WHERE id = $3`, [input.completedDate || new Date(), input.serviceMileage || 0, input.scheduleId]);
+                try {
+                    await client.query(`UPDATE maintenance_schedules 
+             SET last_service_date = $1, last_service_mileage = $2,
+                 next_service_date = CASE WHEN interval_months IS NOT NULL THEN $1 + INTERVAL '1 month' * interval_months ELSE next_service_date END,
+                 next_service_km = CASE WHEN interval_mileage IS NOT NULL THEN $2 + interval_mileage ELSE next_service_km END
+             WHERE id = $3`, [input.completedDate || new Date(), input.serviceMileage || 0, input.scheduleId]);
+                }
+                catch (err) {
+                    throw new Error(`Failed to update schedule: ${err.message}`);
+                }
             }
             await client.query('COMMIT');
             const fullRecord = mapRowToRecord(record);

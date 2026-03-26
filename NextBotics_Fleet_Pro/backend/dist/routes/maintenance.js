@@ -661,7 +661,8 @@ router.post('/records', [
             success: false,
             error: 'Failed to create maintenance record',
             message: error.message,
-            detail: error.detail || error.stack
+            code: error.code,
+            detail: error.detail || error.hint || error.stack
         });
     }
 });
