@@ -1,9 +1,13 @@
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
+import { query } from '../database';
 import { CompanyModel } from '../models/Company';
 import { UserModel, toSafeUser } from '../models/User';
 import { authMiddleware, requireRole } from '../utils/auth';
+import { generateSecurePassword } from '../utils/password';
 import { CreateCompanyInput, ApiResponse } from '../types';
+import { v4 as uuidv4 } from 'uuid';
+import * as bcrypt from 'bcryptjs';
 
 const router = Router();
 
@@ -150,10 +154,34 @@ router.post('/', [
 
     const company = await CompanyModel.create(input);
 
+    // Auto-create default admin user with generated password
+    const adminEmail = `admin@${company.slug}.com`;
+    const generatedPassword = generateSecurePassword(10); // Simple 10-char password
+    const hashedPassword = bcrypt.hashSync(generatedPassword, 10);
+    
+    await query(
+      `INSERT INTO users (id, company_id, email, password_hash, first_name, last_name, role, is_active, must_change_password) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [uuidv4(), company.id, adminEmail, hashedPassword, 'Admin', 'User', 'admin', true, true]
+    );
+
+    // Also create staff record for the admin
+    await query(
+      `INSERT INTO staff (id, company_id, staff_no, staff_name, email, phone, department, branch, role, safety_score) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [uuidv4(), company.id, 'ADM001', 'System Administrator', adminEmail, 
+       input.phone || '+254 700 000 000', 'Management', 'Head Office', 'Manager', 100]
+    );
+
     res.status(201).json({
       success: true,
       data: company,
-      message: 'Company created successfully'
+      adminCredentials: {
+        email: adminEmail,
+        password: generatedPassword,
+        mustChangePassword: true
+      },
+      message: 'Company created successfully. Default admin user has been generated.'
     });
   } catch (error: any) {
     console.error('Create company error:', error);
