@@ -364,7 +364,7 @@ function mapRowToSchedule(row: any): MaintenanceSchedule {
     description: row.description,
     intervalMileage: row.interval_mileage ? parseInt(row.interval_mileage) : undefined,
     lastServiceMileage: parseFloat(row.last_service_mileage || 0),
-    nextServiceMileage: row.next_service_mileage ? parseFloat(row.next_service_mileage) : undefined,
+    nextServiceMileage: row.next_service_km ? parseFloat(row.next_service_km) : undefined,
     intervalMonths: row.interval_months ? parseInt(row.interval_months) : undefined,
     lastServiceDate: row.last_service_date ? new Date(row.last_service_date) : undefined,
     nextServiceDate: row.next_service_date ? new Date(row.next_service_date) : undefined,
@@ -902,7 +902,7 @@ export class MaintenanceScheduleModel {
     const rows = await query(
       `INSERT INTO maintenance_schedules (
         company_id, vehicle_id, schedule_type, service_type, service_name, description,
-        interval_mileage, last_service_mileage, next_service_mileage,
+        interval_mileage, last_service_mileage, next_service_km,
         interval_months, last_service_date, next_service_date,
         estimated_cost, estimated_duration_hours, assigned_provider_id,
         reminder_days_before, reminder_mileage_before, priority
