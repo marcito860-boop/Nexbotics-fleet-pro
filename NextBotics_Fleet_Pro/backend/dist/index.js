@@ -9,7 +9,9 @@ const helmet_1 = __importDefault(require("helmet"));
 const dotenv_1 = __importDefault(require("dotenv"));
 // Load environment variables
 dotenv_1.default.config();
-// Build: 2026-03-19-03-55 - Force redeploy
+// Import database migration runner
+const database_1 = require("./database");
+// Build: 2026-03-27-05-45 - Force redeploy with migrations
 // Import routes
 const auth_1 = __importDefault(require("./routes/auth"));
 const users_1 = __importDefault(require("./routes/users"));
@@ -166,10 +168,21 @@ app.use((err, req, res, next) => {
     });
 });
 // Start server
-app.listen(PORT, () => {
-    console.log(`🚀 NextBotics Fleet Pro API running on port ${PORT}`);
-    console.log(`📊 Health check: http://localhost:${PORT}/health`);
-});
+async function startServer() {
+    try {
+        // Run database migrations first
+        await (0, database_1.runMigrations)();
+        app.listen(PORT, () => {
+            console.log(`🚀 NextBotics Fleet Pro API running on port ${PORT}`);
+            console.log(`📊 Health check: http://localhost:${PORT}/health`);
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+}
+startServer();
 exports.default = app;
 // Build timestamp: Wed Mar 18 03:44:20 AM CST 2026
 // Redeploy trigger Wed Mar 18 04:40:56 PM CST 2026

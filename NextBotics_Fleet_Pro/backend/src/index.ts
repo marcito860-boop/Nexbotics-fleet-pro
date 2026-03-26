@@ -6,7 +6,10 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
-// Build: 2026-03-19-03-55 - Force redeploy
+// Import database migration runner
+import { runMigrations } from './database';
+
+// Build: 2026-03-27-05-45 - Force redeploy with migrations
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -182,10 +185,22 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 NextBotics Fleet Pro API running on port ${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
-});
+async function startServer() {
+  try {
+    // Run database migrations first
+    await runMigrations();
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 NextBotics Fleet Pro API running on port ${PORT}`);
+      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 export default app;
 // Build timestamp: Wed Mar 18 03:44:20 AM CST 2026
