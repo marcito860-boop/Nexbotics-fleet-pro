@@ -262,4 +262,69 @@ router.post('/seed-data', authMiddleware, async (req: Request, res: Response) =>
   }
 });
 
+// POST /api/admin/create-g4s-user - Create G4S pilot user
+router.post('/create-g4s-user', async (req: Request, res: Response) => {
+  try {
+    const bcrypt = await import('bcryptjs');
+    
+    // Check if G4S company exists
+    const companyResult = await query('SELECT id FROM companies WHERE slug = $1', ['g4s-security']);
+    let companyId;
+    
+    if (companyResult.length === 0) {
+      // Create G4S company
+      const companyInsert = await query(
+        `INSERT INTO companies (name, slug, email, phone, address, city, country, timezone, currency, subscription_plan, subscription_status, max_users, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW()) RETURNING id`,
+        ['G4S Security Services', 'g4s-security', 'info@g4s.com', '+254 20 2228000', 'G4S House, Waiyaki Way', 'Nairobi', 'Kenya', 'Africa/Nairobi', 'KES', 'enterprise', 'active', 50]
+      );
+      companyId = companyInsert[0].id;
+    } else {
+      companyId = companyResult[0].id;
+    }
+    
+    // Check if user exists
+    const existingUser = await query('SELECT id FROM users WHERE email = $1', ['pilot@g4s.com']);
+    
+    if (existingUser.length > 0) {
+      // Update password
+      const hashedPassword = await bcrypt.hash('G4SPilot2024!', 10);
+      await query('UPDATE users SET password_hash = $1 WHERE email = $2', [hashedPassword, 'pilot@g4s.com']);
+      
+      return res.json({
+        success: true,
+        message: 'G4S pilot user password updated',
+        data: {
+          email: 'pilot@g4s.com',
+          password: 'G4SPilot2024!',
+          companyId: companyId
+        }
+      });
+    }
+    
+    // Create new user
+    const hashedPassword = await bcrypt.hash('G4SPilot2024!', 10);
+    const userResult = await query(
+      `INSERT INTO users (company_id, email, password_hash, first_name, last_name, role, department, is_active, must_change_password, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id`,
+      [companyId, 'pilot@g4s.com', hashedPassword, 'G4S', 'Pilot', 'admin', 'Operations', true, false]
+    );
+    
+    res.json({
+      success: true,
+      message: 'G4S pilot user created successfully',
+      data: {
+        id: userResult[0].id,
+        email: 'pilot@g4s.com',
+        password: 'G4SPilot2024!',
+        companyId: companyId
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('Create G4S user error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to create G4S user' });
+  }
+});
+
 export default router;

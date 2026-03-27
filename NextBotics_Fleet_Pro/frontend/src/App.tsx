@@ -28,6 +28,7 @@ import CompanyUsersPage from './pages/CompanyUsersPage';
 import DocumentsPage from './pages/DocumentsPage';
 import ReportsPage from './pages/ReportsPage';
 import RoutePlanningPage from './pages/RoutePlanningPage';
+import ImportExportPage from './pages/ImportExportPage';
 
 // Protected route component
 function ProtectedRoute({ children, requireManager = false }: { children: React.ReactNode; requireManager?: boolean }) {
@@ -252,6 +253,15 @@ function App() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/import-export"
+        element={
+          <ProtectedRoute>
+            <ImportExportPage />
           </ProtectedRoute>
         }
       />

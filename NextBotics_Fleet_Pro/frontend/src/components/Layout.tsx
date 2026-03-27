@@ -5,7 +5,7 @@ import {
   Fuel, FileText, GraduationCap, ClipboardCheck, ShieldAlert,
   Package, Receipt, BarChart3, Settings, LogOut, Menu, X,
   Bell, ChevronDown, Zap, Tv, Wrench, Plug, Building2,
-  FolderOpen, PieChart, Map
+  FolderOpen, PieChart, Map, Database
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { clsx, type ClassValue } from 'clsx';
@@ -61,6 +61,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['admin', 'manager'] },
     { name: 'Reports', href: '/reports', icon: PieChart, roles: ['admin', 'manager'] },
     { name: 'Integrations', href: '/integrations', icon: Plug, roles: ['admin', 'manager'] },
+    { name: 'Import / Export', href: '/import-export', icon: Database, roles: ['admin', 'manager'] },
     { name: 'Live TV', href: '/tv', icon: Tv },
   ];
 
