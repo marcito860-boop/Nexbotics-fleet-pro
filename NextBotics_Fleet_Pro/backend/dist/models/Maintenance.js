@@ -698,17 +698,17 @@ class MaintenanceRecordModel {
                 warrantyExpiry = new Date(input.completedDate);
                 warrantyExpiry.setMonth(warrantyExpiry.getMonth() + input.warrantyMonths);
             }
-            // Create record
+            // Create record - include service_date (maps to completed_date for backward compatibility)
             let record;
             try {
                 const recordRows = await client.query(`INSERT INTO maintenance_records (
             company_id, vehicle_id, schedule_id, service_type, category, title, description,
-            provider_id, scheduled_date, started_date, completed_date,
+            provider_id, scheduled_date, started_date, completed_date, service_date,
             service_mileage, next_service_mileage, labor_cost, parts_cost, other_cost,
             status, breakdown_location, breakdown_cause, is_emergency,
             technician_name, driver_id, warranty_months, warranty_expiry,
             invoice_number, documents, notes
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
           RETURNING *`, [
                     companyId,
                     input.vehicleId,
@@ -721,6 +721,7 @@ class MaintenanceRecordModel {
                     input.scheduledDate || null,
                     input.startedDate || null,
                     input.completedDate || null,
+                    input.completedDate || input.scheduledDate || new Date(), // service_date
                     input.serviceMileage || null,
                     input.nextServiceMileage || null,
                     input.laborCost || 0,
