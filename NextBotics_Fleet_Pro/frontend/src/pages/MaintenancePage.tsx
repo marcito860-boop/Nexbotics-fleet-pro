@@ -92,6 +92,24 @@ interface MaintenanceRecord {
   technicianName?: string;
 }
 
+interface JobCard {
+  id: string;
+  recordId: string;
+  providerId: string;
+  cardNumber: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  description?: string;
+  estimatedCost: number;
+  actualCost?: number;
+  internalNotes?: string;
+  startedAt?: string;
+  completedAt?: string;
+  providerName?: string;
+  vehicleRegistration?: string;
+  serviceTitle?: string;
+  createdAt: string;
+}
+
 interface MaintenanceReminder {
   id: string;
   vehicleId: string;
@@ -158,7 +176,7 @@ interface MaintenanceStats {
 export default function MaintenancePage() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'records' | 'providers' | 'parts'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'records' | 'providers' | 'parts' | 'jobcards'>('overview');
   
   // Data states
   const [stats, setStats] = useState<MaintenanceStats | null>(null);
@@ -166,6 +184,7 @@ export default function MaintenancePage() {
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [parts, setParts] = useState<SparePart[]>([]);
+  const [jobCards, setJobCards] = useState<JobCard[]>([]);
   const [_reminders, setReminders] = useState<MaintenanceReminder[]>([]);
   const [downtime, setDowntime] = useState<VehicleDowntime[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -261,6 +280,7 @@ export default function MaintenancePage() {
     else if (activeTab === 'records') loadRecords();
     else if (activeTab === 'providers') loadProviders();
     else if (activeTab === 'parts') loadParts();
+    else if (activeTab === 'jobcards') loadJobCards();
   }, [activeTab, currentPage, searchQuery, statusFilter]);
 
   // ==================== API CALLS ====================
@@ -364,6 +384,26 @@ export default function MaintenancePage() {
       }
     } catch (error) {
       console.error('Failed to load parts:', error);
+    } finally {
+      setLoadingTab(false);
+    }
+  };
+
+  const loadJobCards = async () => {
+    try {
+      setLoadingTab(true);
+      const params = new URLSearchParams();
+      params.set('page', currentPage.toString());
+      params.set('perPage', '20');
+      if (statusFilter) params.set('status', statusFilter);
+      
+      const response = await api.get(`/fleet/maintenance/job-cards?${params}`);
+      if (response.data?.success) {
+        setJobCards(response.data.data.items || []);
+        setTotalPages(response.data.data.totalPages || 1);
+      }
+    } catch (error) {
+      console.error('Failed to load job cards:', error);
     } finally {
       setLoadingTab(false);
     }
@@ -641,6 +681,7 @@ export default function MaintenancePage() {
               { id: 'records', label: 'History', icon: History },
               { id: 'providers', label: 'Providers', icon: Building2 },
               { id: 'parts', label: 'Spare Parts', icon: Package },
+              { id: 'jobcards', label: 'Job Cards', icon: Wrench },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1327,6 +1368,76 @@ export default function MaintenancePage() {
                             </>
                           )}
                         </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Job Cards Tab */}
+        {activeTab === 'jobcards' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            {/* Filters */}
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value="">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Card #</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Provider</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Est. Cost</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loadingTab ? (
+                    <tr><td colSpan={7} className="px-6 py-12"><LoadingState /></td></tr>
+                  ) : jobCards.length === 0 ? (
+                    <tr><td colSpan={7} className="px-6 py-12"><EmptyState message="No job cards found" /></td></tr>
+                  ) : (
+                    jobCards.map((card) => (
+                      <tr key={card.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-sm font-medium text-amber-600">{card.cardNumber}</span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{card.vehicleRegistration || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{card.serviceTitle || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{card.providerName || 'N/A'}</td>
+                        <td className="px-6 py-4">
+                          <span className={cn(
+                            'px-2 py-1 text-xs font-medium rounded-full capitalize',
+                            card.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            card.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                            card.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          )}>
+                            {card.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{formatCurrency(card.estimatedCost)}</td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{formatDate(card.createdAt)}</td>
                       </tr>
                     ))
                   )}
