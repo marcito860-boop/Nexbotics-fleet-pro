@@ -856,17 +856,17 @@ const createIndexes = async (poolRef: any) => {
       const hashedPassword = bcrypt.hashSync('admin123', 10);
       
       if (adminResult.rows.length === 0) {
-        // Create new admin user with all required fields
+        // Create new admin user without company_id (will be NULL)
         await pool.query(
-          'INSERT INTO users (id, email, password_hash, role, company_id, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin', '00000000-0000-0000-0000-000000000001', 'Admin', 'User']
+          'INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6)',
+          [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin', 'Admin', 'User']
         );
         console.log('✅ Default admin user created: admin@fleet.local / admin123');
       } else {
         // Reset password to ensure it's correct
         await pool.query(
-          'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP, company_id = COALESCE(company_id, $3), first_name = COALESCE(first_name, $4), last_name = COALESCE(last_name, $5) WHERE email = $2',
-          [hashedPassword, 'admin@fleet.local', '00000000-0000-0000-0000-000000000001', 'Admin', 'User']
+          'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP, first_name = COALESCE(first_name, $3), last_name = COALESCE(last_name, $4) WHERE email = $2',
+          [hashedPassword, 'admin@fleet.local', 'Admin', 'User']
         );
         console.log('✅ Admin password reset: admin@fleet.local / admin123');
       }
