@@ -6,9 +6,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateTrainingQuestions = exports.getPredictiveMaintenanceSuggestions = exports.getFleetIntelligenceSummary = exports.generateRiskAlerts = exports.calculateVehicleRisk = exports.AI_ENABLED = exports.processFleetCopilotQuery = exports.processChatQuery = exports.predictMaintenanceCosts = exports.detectAnomalies = exports.analyzeDriverBehavior = exports.generateCorrectiveActions = exports.processAnalyticsQuery = exports.generateSlideNotes = exports.generateFleetRecommendations = void 0;
 const openai_1 = __importDefault(require("openai"));
 const database_1 = require("../database");
-const openai = new openai_1.default({
-    apiKey: process.env.OPENAI_API_KEY
-});
+// Lazy-load OpenAI client - only initialize when needed
+let openaiClient = null;
+const getOpenAI = () => {
+    if (!openaiClient && process.env.OPENAI_API_KEY) {
+        openaiClient = new openai_1.default({ apiKey: process.env.OPENAI_API_KEY });
+    }
+    return openaiClient;
+};
 /**
  * AI Service for Fleet Management
  * Provides intelligent insights, predictions, and recommendations
@@ -50,6 +55,9 @@ Vehicles: ${JSON.stringify(vehicles)}
 Fuel Efficiency: ${JSON.stringify(fuelData)}
 
 Provide concise, actionable recommendations for fleet optimization. Format as bullet points.`;
+        const openai = getOpenAI();
+        if (!openai)
+            return getRuleBasedRecommendations();
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -117,6 +125,10 @@ const generateSlideNotes = async (slideTitle, content) => {
         return `Key points:\n• Review ${slideTitle.toLowerCase()} carefully\n• Apply concepts in daily operations`;
     }
     try {
+        const openai = getOpenAI();
+        if (!openai) {
+            return `Key points:\n• ${slideTitle}\n• Review content and apply in practice`;
+        }
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -147,6 +159,9 @@ const processAnalyticsQuery = async (queryText) => {
         return processRuleBasedQuery(queryText);
     }
     try {
+        const openai = getOpenAI();
+        if (!openai)
+            return processRuleBasedQuery(queryText);
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -280,6 +295,9 @@ const generateCorrectiveActions = async (accidentDescription, severity) => {
         return getDefaultCorrectiveActions(severity);
     }
     try {
+        const openai = getOpenAI();
+        if (!openai)
+            return getDefaultCorrectiveActions(severity);
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -630,6 +648,9 @@ Fleet Status:
 - Today's Routes: ${todayRoutes[0]?.count || 0}
 `;
         console.log('🤖 Calling OpenAI API...');
+        const openai = getOpenAI();
+        if (!openai)
+            return 'AI is currently unavailable. Please check the dashboard for fleet information.';
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
@@ -970,6 +991,9 @@ const processFleetCopilotQuery = async (userQuestion) => {
         // If AI is enabled, use OpenAI with full context
         if (exports.AI_ENABLED) {
             console.log('🤖 Calling OpenAI Fleet Copilot...');
+            const openai = getOpenAI();
+            if (!openai)
+                return 'AI is currently unavailable. Please try again later.';
             const response = await openai.chat.completions.create({
                 model: 'gpt-4o-mini',
                 messages: [
@@ -1628,6 +1652,9 @@ Return ONLY a JSON array in this exact format:
     "correctAnswer": "A"
   }
 ]`;
+        const openai = getOpenAI();
+        if (!openai)
+            return getRuleBasedQuestions(content, numQuestions);
         const response = await openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [

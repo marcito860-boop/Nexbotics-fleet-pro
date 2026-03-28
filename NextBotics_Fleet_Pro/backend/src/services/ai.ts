@@ -1,9 +1,14 @@
 import OpenAI from 'openai';
 import { query } from '../database';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+// Lazy-load OpenAI client - only initialize when needed
+let openaiClient: OpenAI | null = null;
+const getOpenAI = (): OpenAI | null => {
+  if (!openaiClient && process.env.OPENAI_API_KEY) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+};
 
 /**
  * AI Service for Fleet Management
@@ -52,6 +57,9 @@ Fuel Efficiency: ${JSON.stringify(fuelData)}
 
 Provide concise, actionable recommendations for fleet optimization. Format as bullet points.`;
 
+    const openai = getOpenAI();
+    if (!openai) return getRuleBasedRecommendations();
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -128,6 +136,11 @@ export const generateSlideNotes = async (slideTitle: string, content: string): P
   }
 
   try {
+    const openai = getOpenAI();
+    if (!openai) {
+      return `Key points:\n• ${slideTitle}\n• Review content and apply in practice`;
+    }
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -169,6 +182,9 @@ export const processAnalyticsQuery = async (queryText: string): Promise<NaturalL
   }
 
   try {
+    const openai = getOpenAI();
+    if (!openai) return processRuleBasedQuery(queryText);
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -314,6 +330,9 @@ export const generateCorrectiveActions = async (accidentDescription: string, sev
   }
 
   try {
+    const openai = getOpenAI();
+    if (!openai) return getDefaultCorrectiveActions(severity);
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -742,6 +761,9 @@ Fleet Status:
 
     console.log('🤖 Calling OpenAI API...');
     
+    const openai = getOpenAI();
+    if (!openai) return 'AI is currently unavailable. Please check the dashboard for fleet information.';
+    
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -1139,6 +1161,9 @@ export const processFleetCopilotQuery = async (userQuestion: string): Promise<st
     // If AI is enabled, use OpenAI with full context
     if (AI_ENABLED) {
       console.log('🤖 Calling OpenAI Fleet Copilot...');
+      
+      const openai = getOpenAI();
+      if (!openai) return 'AI is currently unavailable. Please try again later.';
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -1911,6 +1936,9 @@ Return ONLY a JSON array in this exact format:
     "correctAnswer": "A"
   }
 ]`;
+
+    const openai = getOpenAI();
+    if (!openai) return getRuleBasedQuestions(content, numQuestions);
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
