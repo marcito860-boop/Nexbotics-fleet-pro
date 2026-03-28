@@ -167,10 +167,10 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS customer_id UUID;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS job_card_id UUID;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_id UUID;
 
--- 11. GPS TRACKING TABLES (Create if not exist)
+-- 11. GPS TRACKING TABLES (Create if not exist) - NO FK constraints to avoid dependency issues
 CREATE TABLE IF NOT EXISTS gps_tracking (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+  vehicle_id UUID,
   latitude DECIMAL(10, 8) NOT NULL DEFAULT -1.2921,
   longitude DECIMAL(11, 8) NOT NULL DEFAULT 36.8219,
   speed DECIMAL(5, 2) DEFAULT 0,
@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS gps_tracking (
 
 CREATE TABLE IF NOT EXISTS gps_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+  vehicle_id UUID,
   latitude DECIMAL(10, 8) NOT NULL,
   longitude DECIMAL(11, 8) NOT NULL,
   speed DECIMAL(5, 2) DEFAULT 0,
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS gps_history (
 
 CREATE TABLE IF NOT EXISTS geofences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+  vehicle_id UUID,
   name VARCHAR(255) NOT NULL,
   latitude DECIMAL(10, 8) NOT NULL,
   longitude DECIMAL(11, 8) NOT NULL,
