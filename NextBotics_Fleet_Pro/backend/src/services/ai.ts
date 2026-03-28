@@ -61,7 +61,7 @@ Provide concise, actionable recommendations for fleet optimization. Format as bu
       max_tokens: 500
     });
 
-    return response.choices[0].message.content?.split('\n').filter(line => line.trim()) || [];
+    return response.choices[0].message.content?.split('\n').filter((line: string) => line.trim()) || [];
   } catch (error) {
     console.error('AI recommendation error:', error);
     return getRuleBasedRecommendations();
@@ -329,7 +329,7 @@ export const generateCorrectiveActions = async (accidentDescription: string, sev
       max_tokens: 300
     });
 
-    return response.choices[0].message.content?.split('\n').filter(line => line.trim().startsWith('•') || line.trim().startsWith('-')) || 
+    return response.choices[0].message.content?.split('\n').filter((line: string) => line.trim().startsWith('•') || line.trim().startsWith('-')) || 
            getDefaultCorrectiveActions(severity);
   } catch (error) {
     console.error('Corrective actions error:', error);

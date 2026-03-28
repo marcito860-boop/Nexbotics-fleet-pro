@@ -690,7 +690,7 @@ router.get('/sessions/:id/pdf', async (req, res) => {
               </tr>
             </thead>
             <tbody>
-              ${correctiveActions.map(a => `
+              ${correctiveActions.map((a) => `
                 <tr>
                   <td>${a.issue_identified}</td>
                   <td>${a.corrective_action}</td>

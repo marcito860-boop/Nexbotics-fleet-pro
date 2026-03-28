@@ -3,8 +3,9 @@ import { PoolClient } from 'pg';
 
 // Get pool for transactions
 const getPool = async () => {
-  const { pool } = await import('../database');
-  return pool;
+  const db = await import('../database');
+  if (!db.pool) throw new Error('Database pool not initialized');
+  return db.pool;
 };
 
 export type ServiceType = 'preventive' | 'repair' | 'breakdown' | 'emergency';
@@ -1109,7 +1110,10 @@ export class MaintenanceRecordModel {
 
   static async create(companyId: string, input: CreateRecordInput): Promise<MaintenanceRecord> {
     // Start transaction
-    const client = await (await import('../database')).pool.connect();
+    const db = await import('../database');
+    const pool = db.pool;
+    if (!pool) throw new Error('Database pool not initialized');
+    const client = await pool.connect();
     
     try {
       await client.query('BEGIN');

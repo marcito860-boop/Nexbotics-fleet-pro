@@ -37,8 +37,10 @@ exports.JobCardModel = exports.MaintenanceReminderModel = exports.VehicleDowntim
 const database_1 = require("../database");
 // Get pool for transactions
 const getPool = async () => {
-    const { pool } = await Promise.resolve().then(() => __importStar(require('../database')));
-    return pool;
+    const db = await Promise.resolve().then(() => __importStar(require('../database')));
+    if (!db.pool)
+        throw new Error('Database pool not initialized');
+    return db.pool;
 };
 // ==================== Mapping Functions ====================
 function mapRowToServiceProvider(row) {
@@ -689,7 +691,11 @@ class MaintenanceRecordModel {
     }
     static async create(companyId, input) {
         // Start transaction
-        const client = await (await Promise.resolve().then(() => __importStar(require('../database')))).pool.connect();
+        const db = await Promise.resolve().then(() => __importStar(require('../database')));
+        const pool = db.pool;
+        if (!pool)
+            throw new Error('Database pool not initialized');
+        const client = await pool.connect();
         try {
             await client.query('BEGIN');
             // Calculate warranty expiry

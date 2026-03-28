@@ -81,19 +81,20 @@ export const authenticateApiKey = async (req: ApiKeyRequest, res: Response, next
 
 // Middleware to check API key permissions
 export const requireApiPermission = (permission: string) => {
-  return (req: ApiKeyRequest, res: Response, next: NextFunction) => {
-    if (!req.apiKey) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const apiReq = req as ApiKeyRequest;
+    if (!apiReq.apiKey) {
       return res.status(401).json({ error: 'API key authentication required' });
     }
     
-    const hasPermission = req.apiKey.permissions.includes(permission) || 
-                         req.apiKey.permissions.includes('admin');
+    const hasPermission = apiReq.apiKey.permissions.includes(permission) || 
+                         apiReq.apiKey.permissions.includes('admin');
     
     if (!hasPermission) {
       return res.status(403).json({ 
         error: 'Insufficient permissions',
         required: permission,
-        granted: req.apiKey.permissions
+        granted: apiReq.apiKey.permissions
       });
     }
     

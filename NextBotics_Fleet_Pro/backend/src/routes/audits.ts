@@ -765,7 +765,7 @@ router.get('/sessions/:id/pdf', async (req: Request, res: Response) => {
             </tr>
           </thead>
           <tbody>
-            ${responses.map((r, idx) => `
+            ${responses.map((r: any, idx: number) => `
               <tr>
                 <td>${idx + 1}</td>
                 <td>${r.module_name}</td>
@@ -789,7 +789,7 @@ router.get('/sessions/:id/pdf', async (req: Request, res: Response) => {
               </tr>
             </thead>
             <tbody>
-              ${correctiveActions.map(a => `
+              ${correctiveActions.map((a: any) => `
                 <tr>
                   <td>${a.issue_identified}</td>
                   <td>${a.corrective_action}</td>

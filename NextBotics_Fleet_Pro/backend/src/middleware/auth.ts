@@ -1,19 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { query } from '../database';
-import { JWT_SECRET } from '../routes/auth';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
 
 export interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    email: string;
-    role: string;
-    staffId?: string | null;
-    staffRole?: string | null;
-    department?: string | null;
-    branch?: string | null;
-    companyId?: string | null;
-  };
+  user?: any;
 }
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
