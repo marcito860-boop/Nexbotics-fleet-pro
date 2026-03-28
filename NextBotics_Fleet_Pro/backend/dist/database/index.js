@@ -1412,6 +1412,20 @@ const seedQuestionsIfMissing = async (pool) => {
     catch (err) {
         console.error('❌ Migration failed (routes columns):', err.message);
     }
+    try {
+        // Add missing foreign key columns to related tables
+        await pool.query(`ALTER TABLE job_cards ADD COLUMN IF NOT EXISTS vehicle_id UUID`);
+        await pool.query(`ALTER TABLE repairs ADD COLUMN IF NOT EXISTS vehicle_id UUID`);
+        await pool.query(`ALTER TABLE accidents ADD COLUMN IF NOT EXISTS vehicle_id UUID`);
+        await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS vehicle_id UUID`);
+        await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS inspection_passed BOOLEAN`);
+        await pool.query(`ALTER TABLE fuel_records ADD COLUMN IF NOT EXISTS vehicle_id UUID`);
+        await pool.query(`ALTER TABLE fuel_records ADD COLUMN IF NOT EXISTS km_per_liter DECIMAL(6,2)`);
+        console.log('✅ Related table columns verified');
+    }
+    catch (err) {
+        console.error('❌ Migration failed (related tables):', err.message);
+    }
     console.log('🔧 Migrations complete');
 };
 // Separate migration function for complex operations
