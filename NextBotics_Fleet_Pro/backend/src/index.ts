@@ -1,208 +1,269 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
-
-// Import database migration runner
-import { runMigrations } from './database';
-
-// Build: 2026-03-27-05-45 - Force redeploy with migrations
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { initDatabase, runMigrations } from './database';
+import { authenticateToken } from './middleware/auth';
+import { requestLogger, errorLogger } from './middleware/logger';
+import { rateLimiter, authRateLimiter } from './middleware/rateLimiter';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 // Import routes
 import authRoutes from './routes/auth';
-import userRoutes from './routes/users';
-import companyRoutes from './routes/companies';
 import vehicleRoutes from './routes/vehicles';
-import driverRoutes from './routes/drivers';
-import assignmentRoutes from './routes/assignments';
-import alertRoutes from './routes/alerts';
-import tripRoutes from './routes/trips';
+import staffRoutes from './routes/staff';
+import routeRoutes from './routes/routes';
 import fuelRoutes from './routes/fuel';
-import requisitionRoutes from './routes/requisitions';
-import trainingRoutes from './routes/training';
-import auditRoutes from './routes/audits';
-import riskRoutes from './routes/risks';
-import inventoryRoutes from './routes/inventory';
+import repairRoutes from './routes/repairs';
+import uploadRoutes from './routes/upload';
+import dashboardRoutes from './routes/dashboard';
+import adminRoutes from './routes/admin';
 import analyticsRoutes from './routes/analytics';
-import reportRoutes from './routes/reports';
-import invoiceRoutes from './routes/invoices';
-import importExportRoutes from './routes/importExport';
+import requisitionRoutes from './routes/requisitions';
+import accidentRoutes from './routes/accidents';
+import auditRoutes from './routes/audits';
+import trainingRoutes from './routes/training';
+import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
-import supplierRoutes from './routes/suppliers';
-import documentRoutes from './routes/documents';
-import routePlanningRoutes from './routes/routePlanning';
-import maintenanceRoutes from './routes/maintenance';
+import integrationProvidersRoutes from './routes/integration-providers';
+import settingsRoutes from './routes/settings';
+import operationsRoutes from './routes/operations';
+import workshopRoutes from './routes/workshop';
+import riskIntelligenceRoutes from './routes/riskIntelligence';
+import photoRoutes from './routes/photos';
+import webhookRoutes from './routes/webhooks';
+import inspectionRoutes from './routes/inspections';
+import apiV1Routes from './routes/api/v1';
+import seedDemoRoutes from './routes/seed-demo';
 
-// GraphQL
-import { createHandler } from 'graphql-http/lib/use/express';
-import { makeExecutableSchema } from '@graphql-tools/schema';
-import { typeDefs } from './graphql/schema';
-import { resolvers } from './graphql/resolvers';
-import { authMiddleware } from './utils/auth';
+// Import services for webhooks and operations
+import * as webhookService from './services/webhook';
+import * as operationsAI from './services/operationsAI';
+
+dotenv.config();
+
+// Debug: Log environment variables (without secrets)
+console.log('🔧 Environment Check:');
+console.log('  DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'NOT SET');
+console.log('  JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'NOT SET');
+console.log('  FRONTEND_URL:', process.env.FRONTEND_URL || 'Not set (using *)');
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || "*",
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 
 // Security middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable for API
+  crossOriginEmbedderPolicy: false
+}));
 
-// CORS configuration
-const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? [
-      process.env.FRONTEND_URL,
-      'https://nexbotics-fleet-pro.vercel.app',
-      'https://nexbotics-fleet-pro-git-master-marcito860-boops-projects.vercel.app',
-      'https://nexbotics-fleet-9lcc234lf-marcito860-boops-projects.vercel.app',
-      'https://nexbotics-fleet-nrg4z6gbo-marcito860-boops-projects.vercel.app',
-      'https://nexbotics-fleet-ep4p7uwec-marcito860-boops-projects.vercel.app',
-      'https://nexbotics-fleet-5fc0db38d-marcito860-boops-projects.vercel.app'
-    ].filter((url): url is string => !!url)
-  : ['http://localhost:5173', 'http://localhost:3000'];
+// CORS configuration - allow multiple origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://masaitrevis.github.io',
+  'https://masaitrevis.github.io/fleet-system',
+  'https://fleet-pro-git-master-masaitrevis-projects.vercel.app',
+  'https://fleet-pro.vercel.app'
+].filter(Boolean);
 
 app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Allow all localhost for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+    
+    // Check against allowed origins
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow all Vercel preview deployments (for mobile testing)
+    if (origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+    
+    // Log rejected origins for debugging (but don't crash)
+    console.log('🚫 CORS rejected origin:', origin);
+    console.log('📋 Allowed origins:', allowedOrigins);
+    callback(null, true); // Temporarily allow all for debugging
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+  credentials: true
 }));
+
+// Compression
+app.use(compression());
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+// Request logging (adds requestId)
+app.use(requestLogger);
 
-// Health diagnostic routes (no auth required)
-import healthRoutes from './routes/health';
-app.use('/api/health', healthRoutes);
-
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/companies', companyRoutes);
-
-// Fleet management routes
-app.use('/api/fleet/vehicles', vehicleRoutes);
-app.use('/api/fleet/drivers', driverRoutes);
-app.use('/api/fleet/assignments', assignmentRoutes);
-app.use('/api/fleet/alerts', alertRoutes);
-app.use('/api/fleet/trips', tripRoutes);
-app.use('/api/fleet/fuel', fuelRoutes);
-app.use('/api/fleet/requisitions', requisitionRoutes);
-app.use('/api/fleet/training', trainingRoutes);
-app.use('/api/fleet/audits', auditRoutes);
-app.use('/api/fleet/risks', riskRoutes);
-app.use('/api/fleet/inventory', inventoryRoutes);
-app.use('/api/fleet/analytics', analyticsRoutes);
-app.use('/api/fleet/reports', reportRoutes);
-app.use('/api/fleet/invoices', invoiceRoutes);
-app.use('/api/fleet/import', importExportRoutes);
-app.use('/api/fleet/integrations', integrationRoutes);
-app.use('/api/fleet/suppliers', supplierRoutes);
-app.use('/api/fleet/documents', documentRoutes);
-app.use('/api/fleet/routes', routePlanningRoutes);
-app.use('/api/fleet/maintenance', maintenanceRoutes);
-
-// Integrations and Settings routes
-import integrationProvidersRoutes from './routes/integration-providers';
-import settingsRoutes from './routes/settings';
-import adminRoutes from './routes/admin';
-app.use('/api/fleet/integration-providers', integrationProvidersRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/admin', adminRoutes);
-
-// Demo data seeder (no auth required)
-import seedDemoRoutes from './routes/seed-demo';
-app.use('/api', seedDemoRoutes);
-
-// Debug routes (remove in production)
-import debugRoutes from './routes/debug';
-app.use('/api/debug', debugRoutes);
-
-// GraphQL endpoint
-const schema = makeExecutableSchema({ typeDefs, resolvers });
-app.use('/graphql', authMiddleware, createHandler({
-  schema,
-  context: (req: any) => ({ user: req.raw.user }),
+// Rate limiting for all routes
+app.use(rateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 200
 }));
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    name: 'NextBotics Fleet Pro API',
-    version: '1.0.0',
-    status: 'running',
-    modules: [
-      'auth',
-      'users',
-      'companies',
-      'fleet:vehicles',
-      'fleet:drivers',
-      'fleet:assignments',
-      'fleet:alerts',
-      'fleet:trips',
-      'fleet:fuel',
-      'fleet:requisitions',
-      'fleet:training',
-      'fleet:audits',
-      'fleet:risks',
-      'fleet:inventory',
-      'fleet:analytics',
-      'fleet:reports',
-      'fleet:invoices',
-      'fleet:import-export',
-      'fleet:integrations',
-      'fleet:suppliers',
-      'fleet:documents',
-      'fleet:route-planning',
-      'fleet:maintenance',
-      'graphql'
-    ]
+// Socket.io connection
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
   });
 });
+
+// Make io accessible to routes
+app.locals.io = io;
+
+// Handle OPTIONS preflight for all routes (important for mobile)
+app.options('*', cors());
+
+// Health check (public)
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Fleet API is running', timestamp: new Date().toISOString() });
+});
+
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'unknown';
+  let adminUser = null;
+  
+  try {
+    const { query } = await import('./database');
+    const result = await query('SELECT COUNT(*) as count FROM users');
+    dbStatus = 'connected';
+    
+    const adminResult = await query('SELECT email, role FROM users WHERE email = $1', ['admin@fleet.local']);
+    adminUser = adminResult.length > 0 ? adminResult[0] : null;
+  } catch (err) {
+    dbStatus = 'error: ' + (err as Error).message;
+  }
+  
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    database: dbStatus,
+    adminUser: adminUser ? { email: adminUser.email, role: adminUser.role } : null
+  });
+});
+
+// Demo data seeder (public endpoint)
+app.use('/api/seed-demo', seedDemoRoutes);
+
+// Public routes
+app.use('/api/auth', authRateLimiter, authRoutes);
+
+// Protected routes
+app.use('/api/vehicles', authenticateToken, vehicleRoutes);
+app.use('/api/staff', authenticateToken, staffRoutes);
+app.use('/api/routes', authenticateToken, routeRoutes);
+app.use('/api/fuel', authenticateToken, fuelRoutes);
+app.use('/api/repairs', authenticateToken, repairRoutes);
+app.use('/api/upload', authenticateToken, uploadRoutes);
+app.use('/api/dashboard', authenticateToken, dashboardRoutes);
+app.use('/api/admin', authenticateToken, adminRoutes);
+app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/requisitions', authenticateToken, requisitionRoutes);
+app.use('/api/accidents', authenticateToken, accidentRoutes);
+app.use('/api/audits', authenticateToken, auditRoutes);
+app.use('/api/training', authenticateToken, trainingRoutes);
+app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
+
+// Integration routes (includes public API with API key auth)
+app.use('/api/integrations', integrationRoutes);
+
+// Integration providers (ERP, telematics, fuel cards, etc.)
+app.use('/api/integrations/providers', authenticateToken, integrationProvidersRoutes);
+
+// Settings routes
+app.use('/api/settings', authenticateToken, settingsRoutes);
+
+// Operations routes (AI features, live status, fleet health)
+app.use('/api/operations', authenticateToken, operationsRoutes);
+
+// Workshop routes (stock, invoices, workshop management)
+app.use('/api/workshop', authenticateToken, workshopRoutes);
+
+// Risk Intelligence routes (AI-powered fleet risk analysis)
+app.use('/api/risk-intelligence', authenticateToken, riskIntelligenceRoutes);
+
+// Photo evidence routes (audit & inspection photos)
+app.use('/api/photos', authenticateToken, photoRoutes);
+
+// Webhook management routes
+app.use('/api/webhooks', authenticateToken, webhookRoutes);
+
+// Vehicle Inspection routes
+app.use('/api/inspections', authenticateToken, inspectionRoutes);
+
+// REST API v1 (with API key auth support)
+app.use('/api/v1', apiV1Routes);
+
+// Static file serving for uploads
+app.use('/uploads', express.static(process.env.UPLOAD_DIR || './uploads'));
+
+// Error logging (before error handler)
+app.use(errorLogger);
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    error: 'Endpoint not found' 
-  });
-});
+app.use(notFoundHandler);
 
-// Error handler
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ 
-    success: false, 
-    error: 'Internal server error' 
-  });
-});
+// Global error handler
+app.use(errorHandler);
 
 // Start server
-async function startServer() {
+const startServer = async () => {
   try {
-    // Run database migrations first
-    await runMigrations();
+    await initDatabase();
     
-    app.listen(PORT, () => {
-      console.log(`🚀 NextBotics Fleet Pro API running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
+    // Run migrations but don't crash on failure
+    try {
+      await runMigrations();
+    } catch (migrationError: any) {
+      console.error('⚠️  Migration failed but continuing:', migrationError.message);
+      // Continue starting server even if migrations fail
+    }
+    
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Fleet API + WebSocket running on http://localhost:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🔒 JWT Secret: ${process.env.JWT_SECRET ? 'Configured' : 'NOT SET'}`);
+      console.log(`🤖 Operations AI: Enabled`);
     });
+    
+    // Broadcast operations updates every 30 seconds
+    setInterval(() => {
+      operationsAI.broadcastOperationsUpdate().catch(console.error);
+    }, 30000);
+    
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
-}
+};
 
 startServer();
 
-export default app;
-// Build timestamp: Wed Mar 18 03:44:20 AM CST 2026
-// Redeploy trigger Wed Mar 18 04:40:56 PM CST 2026
-// Force redeploy 1773823487
+export { io };
+// Render deploy trigger: Sat Mar 28 03:38:10 PM CST 2026

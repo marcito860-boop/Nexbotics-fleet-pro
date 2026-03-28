@@ -1,0 +1,216 @@
+================================================================================
+FLEET SYSTEM - ENHANCED MODULES PACKAGE
+================================================================================
+
+This package contains fully functional end-to-end implementations for:
+1. Vehicle Requisition Module
+2. Fuel Management Module
+
+================================================================================
+CHANGES SUMMARY
+================================================================================
+
+## 1. VEHICLE REQUISITION MODULE
+
+### Frontend Changes:
+- File: `frontend/src/components/requisition/RequisitionModule.tsx`
+- Complete workflow: Request → Approval → Allocation → Inspection → Departure → Completion → Rating
+
+### New Features:
+- Dashboard with real-time stats (total requests, pending approvals, allocations, assignments)
+- Full role-based views (Requester, Approver, Allocator, Driver)
+- Pre-trip inspection with 10-point checklist
+- Odometer tracking (start and end)
+- Trip status workflow: pending → approved → allocated → inspected → ready_for_departure → departed → completed
+- Driver rating system (1-5 stars with comments)
+- Failed inspection handling with reallocation
+- Active trips monitoring
+
+### Backend Changes:
+- File: `backend/src/routes/requisitions.ts`
+- New endpoints added:
+  - GET `/api/requisitions/stats` - Dashboard statistics
+  - GET `/api/requisitions/active-trips` - Active trips list
+  - POST `/api/requisitions/:id/depart` - Mark trip as departed
+  - POST `/api/requisitions/:id/complete` - Complete trip
+  - POST `/api/requisitions/:id/allocate` - Allocate vehicle/driver
+  - POST `/api/requisitions/:id/reallocate` - Reallocate after failed inspection
+  - POST `/api/requisitions/:id/inspection` - Submit pre-trip inspection
+  - POST `/api/requisitions/:id/rate` - Rate driver
+
+### Database Schema Required:
+```sql
+-- Requisitions table should have:
+- id, request_no, requested_by, place_of_departure, destination, purpose
+- travel_date, travel_time, return_date, return_time
+- num_passengers, passenger_names, status
+- vehicle_id, driver_id, allocated_by, allocated_at
+- approved_by, approved_at, approval_reason
+- inspection_* fields (tires_ok, brakes_ok, etc.)
+- defects_found, defect_photos, inspection_passed, inspection_completed_at
+- starting_odometer, ending_odometer, distance_km
+- driver_rating, driver_rating_comment, rated_at
+- departed_at, completed_at, completion_notes
+```
+
+---
+
+## 2. FUEL MANAGEMENT MODULE
+
+### Frontend Changes:
+- File: `frontend/src/components/Fuel.tsx`
+- Complete fuel tracking with analytics and alerts
+
+### New Features:
+- Real-time efficiency calculation in form
+- Fuel records table with filtering
+- Analytics dashboard with charts:
+  - Bar chart: Fuel efficiency by vehicle
+  - Pie chart: Cost distribution
+  - Area chart: Fuel trends over time
+- Date range filtering (week, month, quarter, year, all)
+- Vehicle filtering
+- Summary cards (total fuel, cost, distance, avg efficiency)
+- Automatic alerts for low efficiency vehicles (< 5 km/L)
+- Color-coded efficiency warnings (red for < 5 km/L)
+
+### Backend Changes:
+- File: `backend/src/routes/fuel.ts`
+- Enhanced endpoints:
+  - GET `/api/fuel` - List with filtering (vehicle_id, date range)
+  - GET `/api/fuel/analytics` - Analytics summary and alerts
+  - GET `/api/fuel/trends/:vehicleId` - Vehicle-specific trends
+  - POST `/api/fuel` - Create with validation
+  - PUT `/api/fuel/:id` - Update record
+  - DELETE `/api/fuel/:id` - Delete record
+
+### Database Schema Required:
+```sql
+-- Fuel records table:
+- id, fuel_date, vehicle_id
+- card_num, card_name
+- past_mileage, current_mileage, distance_km
+- quantity_liters, km_per_liter
+- amount, cost_per_km, place
+- created_at
+```
+
+---
+
+## 3. WORKFLOW DIAGRAM
+
+### Requisition Workflow:
+```
+[Requester]          [Approver]         [Allocator]        [Driver]          [System]
+    |                    |                   |                 |                 |
+    | Create Request     |                   |                 |                 |
+    |------------------>|                   |                 |                 |
+    |                    |                   |                 |                 |
+    |                    | Approve/Reject    |                 |                 |
+    |                    |------------------>|                 |                 |
+    |                    |                   |                 |                 |
+    |                    |                   | Allocate Vehicle|                 |
+    |                    |                   |>----------------|                 |
+    |                    |                   |                 |                 |
+    |                    |                   |                 | Inspect (10pt)  |
+    |                    |                   |                 |>---------------->|
+    |                    |                   |                 |                 |
+    |                    |                   |                 | Mark Departed   |
+    |                    |                   |                 |>---------------->|
+    |                    |                   |                 |                 |
+    |                    |                   |                 | Mark Completed  |
+    |                    |                   |                 |>---------------->|
+    |                    |                   |                 |                 |
+    | Rate Driver        |                   |                 |                 |
+    |>---------------------------------------------------------|                 |
+    |                    |                   |                 |                 |
+```
+
+### Fuel Workflow:
+```
+[Driver/Admin]                                    [System]
+      |                                               |
+      | Add Fuel Record                             |
+      | (Vehicle, Odometer, Liters, Amount)         |
+      |>---------------------------------------------->|
+      |                                               |
+      |                              Auto-calculate |
+      |                              - Distance     |
+      |                              - Efficiency   |
+      |                              - Cost/km      |
+      |                                               |
+      |                              Update Vehicle |
+      |                              - Current Mileage
+      |                                               |
+      |<---------------------------------------------->|
+      |                                               |
+      | View Analytics                              |
+      | (Charts, Trends, Alerts)                    |
+      |                                               |
+```
+
+================================================================================
+INSTALLATION INSTRUCTIONS
+================================================================================
+
+1. Copy Frontend Files:
+   ```bash
+   cp frontend/src/components/requisition/RequisitionModule.tsx \
+      /path/to/your/project/frontend/src/components/requisition/
+   
+   cp frontend/src/components/Fuel.tsx \
+      /path/to/your/project/frontend/src/components/
+   ```
+
+2. Copy Backend Files:
+   ```bash
+   cp backend/src/routes/requisitions.ts \
+      /path/to/your/project/backend/src/routes/
+   
+   cp backend/src/routes/fuel.ts \
+      /path/to/your/project/backend/src/routes/
+   ```
+
+3. Run Database Migrations (if needed):
+   Check that your database has all the required columns listed above.
+
+4. Build and Deploy:
+   ```bash
+   # Frontend
+   cd frontend && npm run build
+   
+   # Backend
+   cd backend && npm run build && npm start
+   ```
+
+================================================================================
+API ENDPOINTS REFERENCE
+================================================================================
+
+### Requisitions:
+- POST   /api/requisitions                    - Create request
+- GET    /api/requisitions/my-requests        - Get my requests
+- GET    /api/requisitions/my-assignments     - Get driver assignments
+- GET    /api/requisitions/pending-approvals  - Get pending approvals
+- GET    /api/requisitions/pending-allocations- Get pending allocations
+- GET    /api/requisitions/active-trips       - Get active trips
+- GET    /api/requisitions/stats              - Get dashboard stats
+- POST   /api/requisitions/:id/approve        - Approve/reject request
+- POST   /api/requisitions/:id/allocate       - Allocate vehicle/driver
+- POST   /api/requisitions/:id/reallocate     - Reallocate after failure
+- POST   /api/requisitions/:id/inspection     - Submit inspection
+- POST   /api/requisitions/:id/depart         - Mark as departed
+- POST   /api/requisitions/:id/complete       - Complete trip
+- POST   /api/requisitions/:id/rate           - Rate driver
+
+### Fuel:
+- GET    /api/fuel                            - List records
+- GET    /api/fuel/analytics                  - Get analytics
+- GET    /api/fuel/trends/:vehicleId          - Get vehicle trends
+- POST   /api/fuel                            - Create record
+- PUT    /api/fuel/:id                        - Update record
+- DELETE /api/fuel/:id                        - Delete record
+
+================================================================================
+END OF PACKAGE
+================================================================================
