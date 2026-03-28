@@ -204,7 +204,7 @@ router.get('/', async (req: any, res) => {
         email: r.requester_email,
         department: r.department
       },
-      allocatedVehicle: v.registration_num ? {
+      allocatedVehicle: r.registration_num ? {
         id: r.vehicle_id,
         registrationNumber: r.registration_num,
         registration_num: r.registration_num
