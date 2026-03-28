@@ -1538,4 +1538,24 @@ export const query = async (sql: string, params?: any[]): Promise<any> => {
   return result.rows;
 };
 
+// Export pool for transactions
+export { pool };
+
+// Transaction helper
+export const transaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
+  if (!pool) throw new Error('Database not initialized');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 export default pool;

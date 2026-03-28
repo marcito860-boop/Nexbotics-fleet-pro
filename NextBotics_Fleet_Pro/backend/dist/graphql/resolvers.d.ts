@@ -94,13 +94,7 @@ export declare const resolvers: {
             totalTrips: number;
             totalDistance: number;
             averageDistance: number;
-            utilizationByType: {
-                type: any;
-                vehicleCount: number;
-                assignedCount: number;
-                utilizationRate: number;
-                totalDistance: number;
-            }[];
+            utilizationByType: any;
         }>;
     };
     Mutation: {
@@ -116,7 +110,7 @@ export declare const resolvers: {
     };
     Vehicle: {
         driver: (parent: any, _: any, context: any) => Promise<import("../models/Driver").Driver | null>;
-        trips: (parent: any, _: any, context: any) => Promise<any[]>;
+        trips: (parent: any, _: any, context: any) => Promise<any>;
     };
     Driver: {
         vehicle: (parent: any, _: any, context: any) => Promise<import("../models/Vehicle").Vehicle | null>;
@@ -126,7 +120,7 @@ export declare const resolvers: {
     };
     AuditSession: {
         template: (parent: any, _: any, context: any) => Promise<import("../models/Audit").AuditTemplate | null>;
-        responses: (parent: any, _: any, context: any) => Promise<any[]>;
+        responses: (parent: any, _: any, context: any) => Promise<any>;
     };
     InventoryItem: {
         category: (parent: any, _: any, context: any) => Promise<any>;

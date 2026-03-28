@@ -1,348 +1,316 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const auth_1 = require("../utils/auth");
+const auth_1 = require("../middleware/auth");
+const apiAuth_1 = require("../middleware/apiAuth");
+const rateLimiter_1 = require("../middleware/rateLimiter");
 const database_1 = require("../database");
+const apiKeyService = __importStar(require("../services/apiKey"));
+const webhookService = __importStar(require("../services/webhook"));
+const errorHandler_1 = require("../middleware/errorHandler");
+// import swaggerUi from 'swagger-ui-express';
+// import swaggerJsdoc from 'swagger-jsdoc';
 const router = (0, express_1.Router)();
-router.use(auth_1.authMiddleware);
-// ============================================
-// INTEGRATION STATUS & CONFIG
-// ============================================
-// GET /api/fleet/integrations - List available integrations
-router.get('/', async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-        // Get configured integrations
-        const rows = await (0, database_1.query)('SELECT * FROM integrations WHERE company_id = $1 AND is_active = true', [companyId]);
-        const integrations = [
-            {
-                id: 'ai-quiz',
-                name: 'AI Quiz Generation',
-                type: 'ai',
-                description: 'Auto-generate training quizzes from course content',
-                status: 'available',
-                configured: rows.some((r) => r.integration_type === 'ai'),
-                features: ['Question generation', 'Difficulty adjustment', 'Answer verification'],
-            },
-            {
-                id: 'erp-sync',
-                name: 'ERP Integration',
-                type: 'erp',
-                description: 'Sync fleet data with your ERP system',
-                status: 'available',
-                configured: rows.some((r) => r.integration_type === 'erp'),
-                features: ['Invoice sync', 'Inventory sync', 'Cost center mapping'],
-            },
-            {
-                id: 'telematics',
-                name: 'GPS Telematics',
-                type: 'telematics',
-                description: 'Real-time vehicle tracking and telemetry',
-                status: 'available',
-                configured: rows.some((r) => r.integration_type === 'telematics'),
-                features: ['Live location', 'Route tracking', 'Geofencing', 'Speed alerts'],
-            },
-            {
-                id: 'fuel-cards',
-                name: 'Fuel Card Integration',
-                type: 'fuel',
-                description: 'Automatic fuel transaction imports',
-                status: 'available',
-                configured: rows.some((r) => r.integration_type === 'fuel'),
-                features: ['Transaction sync', 'Anomaly detection', 'Spend limits'],
-            },
-            {
-                id: 'maintenance-api',
-                name: 'Maintenance Systems',
-                type: 'maintenance',
-                description: 'Connect to external maintenance providers',
-                status: 'available',
-                configured: rows.some((r) => r.integration_type === 'maintenance'),
-                features: ['Work order sync', 'Parts ordering', 'Service scheduling'],
-            },
-        ];
-        res.json({ success: true, data: integrations });
-    }
-    catch (error) {
-        console.error('Error fetching integrations:', error);
-        res.status(500).json({ success: false, error: 'Failed to fetch integrations' });
-    }
-});
-// GET /api/fleet/integrations/:type/config - Get integration config
-router.get('/:type/config', async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-        const { type } = req.params;
-        const rows = await (0, database_1.query)('SELECT * FROM integrations WHERE company_id = $1 AND integration_type = $2', [companyId, type]);
-        if (rows.length === 0) {
-            return res.json({
-                success: true,
-                data: {
-                    configured: false,
-                    defaultConfig: getDefaultConfig(type),
-                }
-            });
-        }
-        // Return config without sensitive data
-        const config = rows[0].config;
-        const sanitizedConfig = { ...config };
-        delete sanitizedConfig.apiKey;
-        delete sanitizedConfig.password;
-        delete sanitizedConfig.secret;
-        res.json({
-            success: true,
-            data: {
-                configured: true,
-                config: sanitizedConfig,
-                lastSync: rows[0].last_sync_at,
-                status: rows[0].status,
-            },
-        });
-    }
-    catch (error) {
-        console.error('Error fetching integration config:', error);
-        res.status(500).json({ success: false, error: 'Failed to fetch config' });
-    }
-});
-// POST /api/fleet/integrations/:type/config - Save integration config
-router.post('/:type/config', (0, auth_1.requireRole)(['admin']), async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-        const userId = req.user.userId;
-        const { type } = req.params;
-        const { config } = req.body;
-        // Validate config
-        const validation = validateIntegrationConfig(type, config);
-        if (!validation.valid) {
-            return res.status(400).json({ success: false, error: validation.message });
-        }
-        // Test connection
-        const testResult = await testIntegrationConnection(type, config);
-        if (!testResult.success) {
-            return res.status(400).json({ success: false, error: `Connection failed: ${testResult.message}` });
-        }
-        // Upsert config
-        const existing = await (0, database_1.query)('SELECT id FROM integrations WHERE company_id = $1 AND integration_type = $2', [companyId, type]);
-        if (existing.length > 0) {
-            await (0, database_1.query)(`UPDATE integrations SET 
-         config = $1, is_active = true, status = 'connected', updated_by = $2, updated_at = NOW()
-         WHERE id = $3`, [JSON.stringify(config), userId, existing[0].id]);
-        }
-        else {
-            await (0, database_1.query)(`INSERT INTO integrations (company_id, integration_type, name, config, is_active, status, created_by)
-         VALUES ($1, $2, $3, $4, true, 'connected', $5)`, [companyId, type, `${type} Integration`, JSON.stringify(config), userId]);
-        }
-        res.json({ success: true, message: 'Integration configured successfully' });
-    }
-    catch (error) {
-        console.error('Error saving integration config:', error);
-        res.status(500).json({ success: false, error: 'Failed to save config' });
-    }
-});
-// POST /api/fleet/integrations/:type/sync - Trigger manual sync
-router.post('/:type/sync', (0, auth_1.requireRole)(['admin', 'manager']), async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-        const { type } = req.params;
-        const rows = await (0, database_1.query)('SELECT * FROM integrations WHERE company_id = $1 AND integration_type = $2 AND is_active = true', [companyId, type]);
-        if (rows.length === 0) {
-            return res.status(400).json({ success: false, error: 'Integration not configured' });
-        }
-        // Trigger sync based on type
-        const syncResult = await triggerSync(type, companyId, rows[0].config);
-        // Update last sync time
-        await (0, database_1.query)('UPDATE integrations SET last_sync_at = NOW(), status = $1 WHERE id = $2', [syncResult.success ? 'connected' : 'error', rows[0].id]);
-        res.json({
-            success: syncResult.success,
-            data: syncResult,
-        });
-    }
-    catch (error) {
-        console.error('Error triggering sync:', error);
-        res.status(500).json({ success: false, error: 'Failed to trigger sync' });
-    }
-});
-// DELETE /api/fleet/integrations/:type - Disable integration
-router.delete('/:type', (0, auth_1.requireRole)(['admin']), async (req, res) => {
-    try {
-        const companyId = req.user.companyId;
-        const { type } = req.params;
-        await (0, database_1.query)('UPDATE integrations SET is_active = false, status = $1 WHERE company_id = $2 AND integration_type = $3', ['disconnected', companyId, type]);
-        res.json({ success: true, message: 'Integration disabled' });
-    }
-    catch (error) {
-        console.error('Error disabling integration:', error);
-        res.status(500).json({ success: false, error: 'Failed to disable integration' });
-    }
-});
-// ============================================
-// WEBHOOK ENDPOINTS
-// ============================================
-// POST /api/fleet/integrations/webhooks/fuel-card - Fuel card webhook
-router.post('/webhooks/fuel-card', async (req, res) => {
-    try {
-        // Verify webhook signature
-        const signature = req.headers['x-webhook-signature'];
-        if (!verifyWebhookSignature(req.body, signature)) {
-            return res.status(401).json({ error: 'Invalid signature' });
-        }
-        const { companyId, transactions } = req.body;
-        // Process fuel transactions
-        for (const txn of transactions) {
-            await processFuelCardTransaction(companyId, txn);
-        }
-        res.json({ success: true, processed: transactions.length });
-    }
-    catch (error) {
-        console.error('Fuel card webhook error:', error);
-        res.status(500).json({ error: 'Processing failed' });
-    }
-});
-// POST /api/fleet/integrations/webhooks/telematics - Telematics webhook
-router.post('/webhooks/telematics', async (req, res) => {
-    try {
-        const signature = req.headers['x-webhook-signature'];
-        if (!verifyWebhookSignature(req.body, signature)) {
-            return res.status(401).json({ error: 'Invalid signature' });
-        }
-        const { companyId, telemetry } = req.body;
-        // Store telemetry data
-        for (const data of telemetry) {
-            await (0, database_1.query)(`INSERT INTO gps_telemetry (company_id, vehicle_id, latitude, longitude, speed, 
-         heading, altitude, accuracy, odometer, fuel_level, timestamp, ignition_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [companyId, data.vehicleId, data.latitude, data.longitude, data.speed,
-                data.heading, data.altitude, data.accuracy, data.odometer, data.fuelLevel,
-                data.timestamp, data.ignitionStatus]);
-        }
-        res.json({ success: true, processed: telemetry.length });
-    }
-    catch (error) {
-        console.error('Telematics webhook error:', error);
-        res.status(500).json({ error: 'Processing failed' });
-    }
-});
-// ============================================
-// API DOCUMENTATION
-// ============================================
-// GET /api/fleet/integrations/docs - Get API documentation
-router.get('/docs', async (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            version: '1.0.0',
-            baseUrl: '/api/fleet',
-            authentication: {
-                type: 'Bearer Token',
-                header: 'Authorization: Bearer {token}',
-            },
-            endpoints: [
-                { method: 'GET', path: '/vehicles', description: 'List vehicles' },
-                { method: 'POST', path: '/vehicles', description: 'Create vehicle' },
-                { method: 'GET', path: '/drivers', description: 'List drivers' },
-                { method: 'GET', path: '/trips', description: 'List trips' },
-                { method: 'GET', path: '/audits/templates', description: 'Get audit templates' },
-                { method: 'POST', path: '/audits/sessions', description: 'Create audit session' },
-                { method: 'GET', path: '/requisitions', description: 'List requisitions' },
-                { method: 'POST', path: '/requisitions', description: 'Create requisition' },
-                { method: 'GET', path: '/inventory/items', description: 'List inventory items' },
-                { method: 'GET', path: '/invoices', description: 'List invoices' },
-                { method: 'GET', path: '/analytics/dashboard', description: 'Get dashboard analytics' },
-                { method: 'GET', path: '/reports/audits', description: 'Generate audit reports' },
-            ],
-            webhooks: [
-                { event: 'fuel.transaction', description: 'New fuel card transaction' },
-                { event: 'telematics.location', description: 'Vehicle location update' },
-                { event: 'vehicle.alert', description: 'Vehicle alert triggered' },
-            ],
+// ==================== API DOCUMENTATION (SWAGGER) ====================
+// Commented out - swagger packages not installed
+/*
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'NextBotics Fleet Management API',
+      version: '1.0.0',
+      description: 'REST API for fleet management system with vehicles, drivers, inventory, training, and more.',
+      contact: {
+        name: 'NextBotics Support',
+        email: 'support@nextbotics.com'
+      }
+    },
+    servers: [
+      {
+        url: process.env.API_BASE_URL || 'https://fleet-api-0272.onrender.com/api/v1',
+        description: 'Production API'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
         },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key'
+        }
+      }
+    }
+  },
+  apis: ['./src/routes/api/v1/*.ts', './src/routes/*.ts']
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
+// Serve Swagger UI
+router.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Serve raw OpenAPI spec
+router.get('/openapi.json', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+*/
+// ==================== API KEYS ====================
+// Create API key (admin only)
+router.post('/api-keys', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { name, description, permissions, expiresInDays, rateLimitPerMinute } = req.body;
+    if (!name) {
+        throw errorHandler_1.Errors.BadRequest('Name is required');
+    }
+    const expiresAt = expiresInDays
+        ? new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000)
+        : undefined;
+    const result = await apiKeyService.generateApiKey({
+        id: undefined,
+        keyPrefix: '',
+        name,
+        description,
+        createdBy: req.user?.userId,
+        expiresAt,
+        permissions: permissions || ['read'],
+        rateLimitPerMinute: rateLimitPerMinute || 60
     });
-});
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
-function getDefaultConfig(type) {
-    const configs = {
-        ai: {
-            provider: 'openai',
-            model: 'gpt-4',
-            maxQuestionsPerQuiz: 10,
-            difficulty: 'adaptive',
-        },
-        erp: {
-            provider: 'custom',
-            syncFrequency: 'hourly',
-            syncItems: ['invoices', 'inventory', 'cost_centers'],
-        },
-        telematics: {
-            provider: 'geotab',
-            updateInterval: 30,
-            geofencing: true,
-            alerts: ['speeding', 'geofence', 'idle'],
-        },
-        fuel: {
-            provider: 'custom',
-            autoImport: true,
-            anomalyDetection: true,
-        },
-        maintenance: {
-            provider: 'custom',
-            autoCreateWorkOrders: true,
-        },
-    };
-    return configs[type] || {};
-}
-function validateIntegrationConfig(type, config) {
-    switch (type) {
-        case 'telematics':
-            if (!config.apiKey)
-                return { valid: false, message: 'API key is required' };
-            if (!config.provider)
-                return { valid: false, message: 'Provider is required' };
-            break;
-        case 'fuel':
-            if (!config.provider)
-                return { valid: false, message: 'Provider is required' };
-            break;
-        case 'erp':
-            if (!config.endpoint)
-                return { valid: false, message: 'Endpoint URL is required' };
-            break;
+    res.status(201).json({
+        message: 'API key created',
+        id: result.id,
+        key: result.key, // Only shown once!
+        name
+    });
+}));
+// List API keys (admin only)
+router.get('/api-keys', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const keys = await apiKeyService.getApiKeys();
+    res.json(keys);
+}));
+// Revoke API key (admin only)
+router.delete('/api-keys/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const success = await apiKeyService.revokeApiKey(req.params.id);
+    if (!success) {
+        throw errorHandler_1.Errors.NotFound('API key');
     }
-    return { valid: true };
-}
-async function testIntegrationConnection(type, config) {
-    // Simulate connection test
-    return { success: true };
-}
-async function triggerSync(type, companyId, config) {
-    switch (type) {
-        case 'fuel':
-            // Simulate fuel card sync
-            return { success: true, itemsSynced: 15, message: 'Fuel transactions synced' };
-        case 'telematics':
-            // Simulate telematics sync
-            return { success: true, itemsSynced: 120, message: 'Telemetry records synced' };
-        default:
-            return { success: true, itemsSynced: 0 };
+    res.json({ message: 'API key revoked' });
+}));
+// Get API usage stats (admin only)
+router.get('/api-keys/:id/usage', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const days = parseInt(req.query.days) || 7;
+    const stats = await apiKeyService.getApiUsageStats(req.params.id, days);
+    res.json(stats);
+}));
+// ==================== WEBHOOKS ====================
+// Create webhook (admin/manager)
+router.post('/webhooks', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { name, url, events, headers } = req.body;
+    if (!name || !url || !events || !Array.isArray(events)) {
+        throw errorHandler_1.Errors.BadRequest('Name, URL, and events array are required');
     }
-}
-function verifyWebhookSignature(body, signature) {
-    // In production, implement proper HMAC verification
-    return true;
-}
-async function processFuelCardTransaction(companyId, txn) {
-    // Find vehicle by card number or registration
-    const vehicle = await (0, database_1.query)(`SELECT v.id FROM vehicles v
-     JOIN fuel_cards fc ON fc.vehicle_id = v.id
-     WHERE fc.card_number = $1 AND v.company_id = $2`, [txn.cardNumber, companyId]);
-    if (vehicle.length === 0)
-        return;
-    // Create fuel transaction
-    await (0, database_1.query)(`INSERT INTO fuel_transactions (company_id, vehicle_id, transaction_date, 
-     station_name, liters, price_per_liter, total_cost, odometer_reading, receipt_number)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (receipt_number) DO NOTHING`, [companyId, vehicle[0].id, txn.timestamp, txn.station, txn.liters,
-        txn.pricePerLiter, txn.totalCost, txn.odometer, txn.receiptNumber]);
-}
+    // Validate URL
+    try {
+        new URL(url);
+    }
+    catch {
+        throw errorHandler_1.Errors.BadRequest('Invalid URL format');
+    }
+    const result = await webhookService.createWebhook({
+        name,
+        url,
+        events,
+        createdBy: req.user?.userId || '',
+        headers
+    });
+    res.status(201).json({
+        message: 'Webhook created',
+        webhook: result.webhook,
+        secret: result.secret // Only shown once!
+    });
+}));
+// List webhooks (admin/manager)
+router.get('/webhooks', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const webhooks = await webhookService.getWebhooks();
+    res.json(webhooks);
+}));
+// Update webhook (admin/manager)
+router.put('/webhooks/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const webhook = await webhookService.updateWebhook(req.params.id, req.body);
+    if (!webhook) {
+        throw errorHandler_1.Errors.NotFound('Webhook');
+    }
+    res.json(webhook);
+}));
+// Delete webhook (admin/manager)
+router.delete('/webhooks/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const success = await webhookService.deleteWebhook(req.params.id);
+    if (!success) {
+        throw errorHandler_1.Errors.NotFound('Webhook');
+    }
+    res.json({ message: 'Webhook deleted' });
+}));
+// Test webhook (admin/manager)
+router.post('/webhooks/:id/test', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const result = await webhookService.testWebhook(req.params.id);
+    res.json(result);
+}));
+// Get webhook logs (admin/manager)
+router.get('/webhooks/:id/logs', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin', 'manager']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const limit = parseInt(req.query.limit) || 50;
+    const logs = await webhookService.getWebhookLogs(req.params.id, limit);
+    res.json(logs);
+}));
+// ==================== PUBLIC API (API KEY AUTH) ====================
+// Get vehicles (public API)
+router.get('/public/vehicles', (0, rateLimiter_1.apiKeyRateLimiter)(100), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('read'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const result = await (0, database_1.query)(`
+      SELECT id, registration_num, make_model, status, department, branch, current_mileage
+      FROM vehicles
+      WHERE deleted_at IS NULL AND status = 'Active'
+      ORDER BY registration_num
+    `);
+    res.json(result);
+}));
+// Get single vehicle (public API)
+router.get('/public/vehicles/:id', (0, rateLimiter_1.apiKeyRateLimiter)(100), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('read'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const result = await (0, database_1.query)(`
+      SELECT id, registration_num, make_model, status, department, branch, 
+             current_mileage, next_service_due, year_of_manufacture
+      FROM vehicles
+      WHERE id = $1 AND deleted_at IS NULL
+    `, [req.params.id]);
+    if (!result || result.length === 0) {
+        throw errorHandler_1.Errors.NotFound('Vehicle');
+    }
+    res.json(result[0]);
+}));
+// Get drivers (public API)
+router.get('/public/drivers', (0, rateLimiter_1.apiKeyRateLimiter)(100), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('read'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const result = await (0, database_1.query)(`
+      SELECT id, staff_name, email, phone, department, branch, role
+      FROM staff
+      WHERE deleted_at IS NULL AND role = 'Driver'
+      ORDER BY staff_name
+    `);
+    res.json(result);
+}));
+// Create route entry (public API - write permission required)
+router.post('/public/routes', (0, rateLimiter_1.apiKeyRateLimiter)(50), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('write'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { route_date, route_name, vehicle_id, actual_km, actual_fuel } = req.body;
+    if (!route_date || !vehicle_id || !actual_km) {
+        throw errorHandler_1.Errors.BadRequest('route_date, vehicle_id, and actual_km are required');
+    }
+    const result = await (0, database_1.query)(`
+      INSERT INTO routes (id, route_date, route_name, vehicle_id, actual_km, actual_fuel, created_at)
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      RETURNING *
+    `, [route_date, route_name || null, vehicle_id, actual_km, actual_fuel || null]);
+    res.status(201).json(result[0]);
+}));
+// Record fuel transaction (public API - write permission required)
+router.post('/public/fuel', (0, rateLimiter_1.apiKeyRateLimiter)(50), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('write'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { fuel_date, vehicle_id, quantity_liters, amount, current_mileage } = req.body;
+    if (!fuel_date || !vehicle_id || !quantity_liters) {
+        throw errorHandler_1.Errors.BadRequest('fuel_date, vehicle_id, and quantity_liters are required');
+    }
+    // Get past mileage for distance calculation
+    const vehicleResult = await (0, database_1.query)('SELECT current_mileage FROM vehicles WHERE id = $1', [vehicle_id]);
+    const pastMileage = vehicleResult[0]?.current_mileage || current_mileage || 0;
+    const result = await (0, database_1.query)(`
+      INSERT INTO fuel_records (id, fuel_date, vehicle_id, quantity_liters, amount, 
+                               current_mileage, past_mileage, created_at)
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+      RETURNING *
+    `, [fuel_date, vehicle_id, quantity_liters, amount || null, current_mileage, pastMileage]);
+    // Update vehicle mileage if newer
+    if (current_mileage) {
+        await (0, database_1.query)('UPDATE vehicles SET current_mileage = GREATEST(current_mileage, $1) WHERE id = $2', [current_mileage, vehicle_id]);
+    }
+    res.status(201).json(result[0]);
+}));
+// Report accident (public API - write permission required)
+router.post('/public/accidents', (0, rateLimiter_1.apiKeyRateLimiter)(20), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('write'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { accident_date, vehicle_id, driver_id, location, description } = req.body;
+    if (!accident_date || !vehicle_id || !description) {
+        throw errorHandler_1.Errors.BadRequest('accident_date, vehicle_id, and description are required');
+    }
+    const result = await (0, database_1.query)(`
+      INSERT INTO accidents (id, accident_date, vehicle_id, driver_id, location, 
+                           description, status, created_at)
+      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'Reported', CURRENT_TIMESTAMP)
+      RETURNING *
+    `, [accident_date, vehicle_id, driver_id || null, location || null, description]);
+    // Trigger webhook
+    await webhookService.triggerWebhook('accident.reported', result[0]);
+    res.status(201).json(result[0]);
+}));
+// Get maintenance due (public API)
+router.get('/public/maintenance/due', (0, rateLimiter_1.apiKeyRateLimiter)(100), apiAuth_1.authenticateApiKey, (0, apiAuth_1.requireApiPermission)('read'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const days = parseInt(req.query.days) || 30;
+    const result = await (0, database_1.query)(`
+      SELECT id, registration_num, make_model, current_mileage, 
+             next_service_due, last_service_date
+      FROM vehicles
+      WHERE deleted_at IS NULL
+        AND (next_service_due IS NULL OR next_service_due <= CURRENT_DATE + INTERVAL '${days} days')
+      ORDER BY next_service_due NULLS LAST
+    `);
+    res.json(result);
+}));
+// Webhook verification endpoint (public)
+router.post('/public/webhooks/verify', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { payload, signature, secret } = req.body;
+    if (!payload || !signature || !secret) {
+        throw errorHandler_1.Errors.BadRequest('payload, signature, and secret are required');
+    }
+    const isValid = webhookService.verifySignature(payload, signature, secret);
+    res.json({ valid: isValid });
+}));
+// ==================== USAGE STATS ====================
+// Get overall API usage (admin only)
+router.get('/usage', auth_1.authenticateToken, (0, auth_1.requireRole)(['admin']), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const days = parseInt(req.query.days) || 7;
+    const stats = await apiKeyService.getApiUsageStats(undefined, days);
+    res.json(stats);
+}));
 exports.default = router;
 //# sourceMappingURL=integrations.js.map
