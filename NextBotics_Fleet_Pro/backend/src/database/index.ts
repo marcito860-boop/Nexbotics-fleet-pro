@@ -1612,6 +1612,25 @@ export const runMigrations = async () => {
     }
   }
   console.log('✅ Company ID columns added for multi-tenant support');
+
+  // ==================== COMPREHENSIVE SCHEMA MIGRATION ====================
+  // This fixes ALL missing columns from old database schemas
+  try {
+    console.log('🔧 Running comprehensive schema migration...');
+    const fs = await import('fs');
+    const path = await import('path');
+    const migrationPath = path.join(__dirname, '../../database/migrations/008_complete_schema_migration.sql');
+    
+    if (fs.existsSync(migrationPath)) {
+      const sql = fs.readFileSync(migrationPath, 'utf8');
+      await pool.query(sql);
+      console.log('✅ Comprehensive schema migration completed');
+    } else {
+      console.log('⚠️ Comprehensive migration file not found');
+    }
+  } catch (err: any) {
+    console.error('❌ Comprehensive migration failed:', err.message);
+  }
 };
 
 // Run inspection module migration
