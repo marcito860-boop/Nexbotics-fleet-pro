@@ -151,6 +151,17 @@ const createTables = async () => {
     )
   `);
 
+  // FIX: Add missing vehicle columns if they don't exist (for older databases)
+  try {
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS minor_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS medium_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS major_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS target_consumption_rate DECIMAL(5,2)`);
+    console.log('✅ Vehicle columns verified');
+  } catch (e) {
+    // Ignore errors
+  }
+
   // Routes table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS routes (
