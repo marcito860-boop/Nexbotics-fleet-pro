@@ -76,6 +76,7 @@ const webhooks_1 = __importDefault(require("./routes/webhooks"));
 const inspections_1 = __importDefault(require("./routes/inspections"));
 const v1_1 = __importDefault(require("./routes/api/v1"));
 const seed_demo_1 = __importDefault(require("./routes/seed-demo"));
+const gps_1 = __importDefault(require("./routes/gps"));
 const operationsAI = __importStar(require("./services/operationsAI"));
 dotenv_1.default.config();
 // Debug: Log environment variables (without secrets)
@@ -218,6 +219,8 @@ app.use('/api/photos', auth_1.authenticateToken, photos_1.default);
 app.use('/api/webhooks', auth_1.authenticateToken, webhooks_1.default);
 // Vehicle Inspection routes
 app.use('/api/inspections', auth_1.authenticateToken, inspections_1.default);
+// GPS Tracking routes
+app.use('/api/gps', auth_1.authenticateToken, gps_1.default);
 // REST API v1 (with API key auth support)
 app.use('/api/v1', v1_1.default);
 // Static file serving for uploads

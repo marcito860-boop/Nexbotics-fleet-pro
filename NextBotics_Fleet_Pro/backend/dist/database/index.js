@@ -662,6 +662,55 @@ const createTables = async () => {
       payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+    // ==================== GPS TRACKING TABLES ====================
+    // GPS Tracking - current location
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS gps_tracking (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+      latitude DECIMAL(10, 8) NOT NULL,
+      longitude DECIMAL(11, 8) NOT NULL,
+      speed DECIMAL(5, 2) DEFAULT 0,
+      heading DECIMAL(5, 2) DEFAULT 0,
+      ignition_status VARCHAR(10) DEFAULT 'off',
+      odometer INTEGER,
+      fuel_level INTEGER,
+      battery_voltage DECIMAL(4, 2),
+      accuracy INTEGER DEFAULT 10,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(vehicle_id)
+    )
+  `);
+    // GPS History - location history
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS gps_history (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+      latitude DECIMAL(10, 8) NOT NULL,
+      longitude DECIMAL(11, 8) NOT NULL,
+      speed DECIMAL(5, 2) DEFAULT 0,
+      heading DECIMAL(5, 2) DEFAULT 0,
+      ignition_status VARCHAR(10) DEFAULT 'off',
+      odometer INTEGER,
+      recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      accuracy INTEGER DEFAULT 10
+    )
+  `);
+    // Geofences
+    await pool.query(`
+    CREATE TABLE IF NOT EXISTS geofences (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      vehicle_id UUID REFERENCES vehicles(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      latitude DECIMAL(10, 8) NOT NULL,
+      longitude DECIMAL(11, 8) NOT NULL,
+      radius INTEGER NOT NULL, -- in meters
+      alert_on_enter BOOLEAN DEFAULT true,
+      alert_on_exit BOOLEAN DEFAULT true,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
     // ==================== CREATE INDEXES ====================
     await createIndexes(pool);
 };
@@ -739,7 +788,13 @@ const createIndexes = async (poolRef) => {
         { name: 'idx_invoices_status', table: 'invoices', column: 'status' },
         { name: 'idx_invoices_date', table: 'invoices', column: 'invoice_date' },
         { name: 'idx_invoice_items_invoice_id', table: 'invoice_items', column: 'invoice_id' },
-        { name: 'idx_invoice_payments_invoice_id', table: 'invoice_payments', column: 'invoice_id' }
+        { name: 'idx_invoice_payments_invoice_id', table: 'invoice_payments', column: 'invoice_id' },
+        // GPS Tracking indexes
+        { name: 'idx_gps_tracking_vehicle_id', table: 'gps_tracking', column: 'vehicle_id' },
+        { name: 'idx_gps_tracking_last_updated', table: 'gps_tracking', column: 'last_updated' },
+        { name: 'idx_gps_history_vehicle_id', table: 'gps_history', column: 'vehicle_id' },
+        { name: 'idx_gps_history_recorded_at', table: 'gps_history', column: 'recorded_at' },
+        { name: 'idx_geofences_vehicle_id', table: 'geofences', column: 'vehicle_id' }
     ];
     for (const idx of indexes) {
         try {
