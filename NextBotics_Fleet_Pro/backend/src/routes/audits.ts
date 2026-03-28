@@ -74,8 +74,10 @@ const initializeAuditTemplates = async (): Promise<void> => {
   }
 };
 
-// Initialize templates on module load
-initializeAuditTemplates();
+// Initialize templates on module load - wrapped to prevent crash
+initializeAuditTemplates().catch(err => {
+  console.error('⚠️ Audit templates initialization failed (will retry on first request):', err.message);
+});
 
 // =============================================================================
 // TEMPLATE ROUTES
