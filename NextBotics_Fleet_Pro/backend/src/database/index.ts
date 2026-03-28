@@ -852,6 +852,18 @@ const createIndexes = async (poolRef: any) => {
   // Create or reset default admin user
   if (pool) {
     try {
+      // First, ensure default company exists
+      try {
+        await pool.query(`
+          INSERT INTO companies (id, name, slug, email)
+          VALUES ('00000000-0000-0000-0000-000000000001', 'Default Company', 'default-company', 'admin@fleet.local')
+          ON CONFLICT (id) DO NOTHING
+        `);
+        console.log('✅ Default company ensured');
+      } catch (companyErr: any) {
+        console.log('ℹ️ Company may already exist or table structure differs:', companyErr.message);
+      }
+      
       const adminResult = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', ['admin@fleet.local']);
       const hashedPassword = bcrypt.hashSync('admin123', 10);
       
