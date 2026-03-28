@@ -1024,6 +1024,13 @@ const createAuditTables = async () => {
     )
   `);
   
+  // FIX: Add template_name column if it doesn't exist (for older databases)
+  try {
+    await pool.query(`ALTER TABLE audit_templates ADD COLUMN IF NOT EXISTS template_name VARCHAR(255)`);
+  } catch (e) {
+    // Column might already exist, ignore error
+  }
+  
   // Audit questions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_questions (
