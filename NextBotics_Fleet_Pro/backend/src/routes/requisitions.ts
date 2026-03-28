@@ -31,7 +31,7 @@ router.post('/', async (req: any, res) => {
 
   // Normalize field names
   const normalizedData = {
-    requested_by: requested_by || requestBy || staffId || req.user?.staffId,
+    requested_by: requested_by || requestBy || staffId,
     place_of_departure: place_of_departure || placeOfDeparture || fromLocation || '',
     destination: destination || toLocation || '',
     purpose: purpose || '',
@@ -45,19 +45,64 @@ router.post('/', async (req: any, res) => {
     notes: notes || ''
   };
 
+  // If requested_by not provided, try to find staff by user's email
+  let requesterId = normalizedData.requested_by;
+  let staffEmail = null;
+  
+  try {
+    if (!requesterId && req.user?.email) {
+      // Find staff by email
+      const staffByEmail = await query('SELECT id, staff_name, email, department FROM staff WHERE email = $1', [req.user.email]);
+      if (staffByEmail && staffByEmail.length > 0) {
+        requesterId = staffByEmail[0].id;
+        staffEmail = staffByEmail[0].email;
+      }
+    }
+    
+    // If still no requester, create a default staff record for this user
+    if (!requesterId && req.user) {
+      const newStaffId = uuidv4();
+      const staffName = req.user.firstName && req.user.lastName 
+        ? `${req.user.firstName} ${req.user.lastName}`
+        : req.user.email.split('@')[0];
+      
+      await query(`
+        INSERT INTO staff (id, staff_name, email, role, department)
+        VALUES ($1, $2, $3, 'Staff', 'General')
+        ON CONFLICT (email) DO UPDATE SET staff_name = EXCLUDED.staff_name
+        RETURNING id, email
+      `, [newStaffId, staffName, req.user.email]);
+      
+      requesterId = newStaffId;
+      staffEmail = req.user.email;
+    }
+  } catch (err) {
+    console.error('Error finding/creating staff:', err);
+  }
+
   // Validation
-  if (!normalizedData.requested_by || !normalizedData.place_of_departure || !normalizedData.destination || 
+  if (!requesterId || !normalizedData.place_of_departure || !normalizedData.destination || 
       !normalizedData.purpose || !normalizedData.travel_date) {
     return res.status(400).json(errorResponse('Missing required fields',
-      { fields: ['requested_by', 'place_of_departure', 'destination', 'purpose', 'travel_date'] }
+      { 
+        fields: ['requested_by', 'place_of_departure', 'destination', 'purpose', 'travel_date'],
+        received: { 
+          hasRequesterId: !!requesterId, 
+          hasDeparture: !!normalizedData.place_of_departure,
+          hasDestination: !!normalizedData.destination,
+          hasPurpose: !!normalizedData.purpose,
+          hasTravelDate: !!normalizedData.travel_date,
+          user: req.user ? { id: req.user.userId, email: req.user.email } : null
+        }
+      }
     ));
   }
 
   try {
     // Check if staff has email
-    const staffCheck = await query('SELECT staff_name, email, department FROM staff WHERE id = $1', [normalizedData.requested_by]);
+    const staffCheck = await query('SELECT staff_name, email, department FROM staff WHERE id = $1', [requesterId]);
     if (!staffCheck || staffCheck.length === 0) {
-      return res.status(400).json(errorResponse('Staff not found'));
+      return res.status(400).json(errorResponse('Staff not found', { staffId: requesterId }));
     }
 
     const staff = staffCheck[0];
@@ -82,7 +127,7 @@ router.post('/', async (req: any, res) => {
         status, created_at, priority, notes
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', CURRENT_TIMESTAMP, $13, $14)
     `, [
-      id, requestNo, normalizedData.requested_by, normalizedData.place_of_departure, 
+      id, requestNo, requesterId, normalizedData.place_of_departure, 
       normalizedData.destination, normalizedData.purpose,
       normalizedData.travel_date, normalizedData.travel_time, 
       normalizedData.return_date, normalizedData.return_time,
