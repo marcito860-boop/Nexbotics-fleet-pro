@@ -175,7 +175,7 @@ app.use('/api/seed-demo', seedDemoRoutes);
 // Public routes
 app.use('/api/auth', authRateLimiter, authRoutes);
 
-// Protected routes
+// Protected routes - Legacy paths (keep for backward compatibility)
 app.use('/api/vehicles', authenticateToken, vehicleRoutes);
 app.use('/api/staff', authenticateToken, staffRoutes);
 app.use('/api/routes', authenticateToken, routeRoutes);
@@ -190,6 +190,26 @@ app.use('/api/accidents', authenticateToken, accidentRoutes);
 app.use('/api/audits', authenticateToken, auditRoutes);
 app.use('/api/training', authenticateToken, trainingRoutes);
 app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
+
+// Protected routes - Fleet API paths (matches frontend expectations)
+app.use('/api/fleet/vehicles', authenticateToken, vehicleRoutes);
+app.use('/api/fleet/drivers', authenticateToken, staffRoutes); // Drivers are staff
+app.use('/api/fleet/routes', authenticateToken, routeRoutes);
+app.use('/api/fleet/fuel', authenticateToken, fuelRoutes);
+app.use('/api/fleet/assignments', authenticateToken, requisitionRoutes); // Map assignments to requisitions
+app.use('/api/fleet/trips', authenticateToken, requisitionRoutes); // Map trips to requisitions
+app.use('/api/fleet/requisitions', authenticateToken, requisitionRoutes);
+app.use('/api/fleet/accidents', authenticateToken, accidentRoutes);
+app.use('/api/fleet/audits', authenticateToken, auditRoutes);
+app.use('/api/fleet/training', authenticateToken, trainingRoutes);
+app.use('/api/fleet/alerts', authenticateToken, dashboardRoutes); // Alerts from dashboard
+app.use('/api/fleet/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/fleet/inventory', authenticateToken, workshopRoutes); // Inventory from workshop
+app.use('/api/fleet/invoices', authenticateToken, workshopRoutes); // Invoices from workshop
+app.use('/api/fleet/risks', authenticateToken, riskIntelligenceRoutes);
+app.use('/api/fleet/documents', authenticateToken, uploadRoutes);
+app.use('/api/fleet/suppliers', authenticateToken, workshopRoutes);
+app.use('/api/fleet/maintenance', authenticateToken, repairRoutes);
 
 // Integration routes (includes public API with API key auth)
 app.use('/api/integrations', integrationRoutes);
