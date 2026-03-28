@@ -357,7 +357,7 @@ export const getLiveFleetStatus = async () => {
       'Fuel Anomalies' as title
     FROM fuel_records fr
     JOIN vehicles v ON v.id = fr.vehicle_id
-    WHERE fr.km_per_liter > v.target_consumption_rate * 1.3
+    WHERE fr.km_per_liter < 5
     AND fr.fuel_date >= CURRENT_DATE - INTERVAL '7 days'
   `);
   
