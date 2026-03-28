@@ -10,7 +10,7 @@ const analyzeVehicleHealth = async (vehicleId) => {
     const vehicles = await (0, database_1.query)(`
     SELECT 
       v.id,
-      v.registration_num,
+      v.registration_number,
       v.current_mileage,
       v.last_service_date,
       v.next_service_due,
@@ -47,12 +47,12 @@ const analyzeVehicleHealth = async (vehicleId) => {
             if (daysUntil < 0) {
                 healthScore -= 25;
                 predictedIssues.push('Service overdue');
-                recommendedActions.push(`Schedule immediate service for ${v.registration_num}`);
+                recommendedActions.push(`Schedule immediate service for ${v.registration_number}`);
             }
             else if (daysUntil < 7) {
                 healthScore -= 15;
                 predictedIssues.push('Service due within 7 days');
-                recommendedActions.push(`Schedule service for ${v.registration_num} within this week`);
+                recommendedActions.push(`Schedule service for ${v.registration_number} within this week`);
             }
             else if (daysUntil < 14) {
                 healthScore -= 5;
@@ -63,13 +63,13 @@ const analyzeVehicleHealth = async (vehicleId) => {
         if (v.accident_count_90d > 0) {
             healthScore -= v.accident_count_90d * 10;
             predictedIssues.push(`${v.accident_count_90d} accident(s) in last 90 days`);
-            recommendedActions.push(`Review driver training for ${v.registration_num}`);
+            recommendedActions.push(`Review driver training for ${v.registration_number}`);
         }
         // Failed inspections
         if (v.failed_inspections_30d > 0) {
             healthScore -= v.failed_inspections_30d * 15;
             predictedIssues.push(`${v.failed_inspections_30d} failed inspection(s) recently`);
-            recommendedActions.push(`Conduct thorough inspection of ${v.registration_num}`);
+            recommendedActions.push(`Conduct thorough inspection of ${v.registration_number}`);
         }
         // Open job cards
         if (v.open_job_cards > 0) {
@@ -80,13 +80,13 @@ const analyzeVehicleHealth = async (vehicleId) => {
         if (v.repair_costs_90d > 5000) {
             healthScore -= 10;
             predictedIssues.push('High repair costs - potential chronic issues');
-            recommendedActions.push(`Consider vehicle replacement evaluation for ${v.registration_num}`);
+            recommendedActions.push(`Consider vehicle replacement evaluation for ${v.registration_number}`);
         }
         // Defect flags
         if (v.defect_notes) {
             healthScore -= 20;
             predictedIssues.push('Active defect reported');
-            recommendedActions.push(`Address reported defect on ${v.registration_num}`);
+            recommendedActions.push(`Address reported defect on ${v.registration_number}`);
         }
         // Usage pattern (low usage might indicate issues)
         if (v.routes_30d === 0) {
@@ -105,7 +105,7 @@ const analyzeVehicleHealth = async (vehicleId) => {
         healthScore = Math.max(0, healthScore);
         return {
             vehicleId: v.id,
-            registrationNum: v.registration_num,
+            registrationNum: v.registration_number,
             healthScore,
             riskLevel,
             predictedIssues,
@@ -227,7 +227,7 @@ const getLiveFleetStatus = async () => {
       r.id,
       r.route_name,
       r.route_date,
-      v.registration_num,
+      v.registration_number,
       d.staff_name as driver_name,
       r.actual_km,
       r.target_km,
@@ -303,7 +303,7 @@ const getLiveFleetStatus = async () => {
       a.accident_date,
       a.severity,
       a.status,
-      v.registration_num,
+      v.registration_number,
       d.staff_name as driver_name
     FROM accidents a
     JOIN vehicles v ON v.id = a.vehicle_id
