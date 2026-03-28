@@ -4,13 +4,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-// Helper to wrap responses
-const successResponse = (data: any, message?: string) => ({ success: true, data, message });
-const errorResponse = (error: string, details?: any) => ({ success: false, error, details });
+// ==================== FUEL RECORDS ====================
 
-// ==================== FUEL RECORDS / TRANSACTIONS ====================
-
-// Get all fuel records with filtering (mapped to /transactions for frontend)
+// Get all fuel records - RETURNS RAW ARRAY (for frontend compatibility)
 router.get('/', async (req: any, res) => {
   try {
     const { vehicle_id, start_date, end_date, limit = 100 } = req.query;
@@ -46,80 +42,42 @@ router.get('/', async (req: any, res) => {
     params.push(parseInt(limit as string) || 100);
     
     const result = await query(queryStr, params);
-    res.json(successResponse(result));
+    
+    // Return raw array for frontend compatibility
+    res.json(result);
   } catch (error) {
     console.error('Get fuel records error:', error);
-    res.status(500).json(errorResponse('Failed to fetch fuel records'));
+    res.status(500).json({ error: 'Failed to fetch fuel records' });
   }
 });
 
-// Get fuel transactions (alias for / - matches frontend expectation)
-router.get('/transactions', async (req: any, res) => {
-  try {
-    const { vehicleId, driverId, dateFrom, dateTo, limit = 100 } = req.query;
-    
-    let queryStr = `
-      SELECT f.*, v.registration_num, v.make_model, v.fuel_type
-      FROM fuel_records f
-      LEFT JOIN vehicles v ON v.id = f.vehicle_id
-      WHERE 1=1
-    `;
-    let params: any[] = [];
-    let paramIndex = 1;
-    
-    if (vehicleId) {
-      queryStr += ` AND f.vehicle_id = $${paramIndex}`;
-      params.push(vehicleId);
-      paramIndex++;
-    }
-    
-    if (dateFrom) {
-      queryStr += ` AND f.fuel_date >= $${paramIndex}`;
-      params.push(dateFrom);
-      paramIndex++;
-    }
-    
-    if (dateTo) {
-      queryStr += ` AND f.fuel_date <= $${paramIndex}`;
-      params.push(dateTo);
-      paramIndex++;
-    }
-    
-    queryStr += ` ORDER BY f.fuel_date DESC LIMIT $${paramIndex}`;
-    params.push(parseInt(limit as string) || 100);
-    
-    const result = await query(queryStr, params);
-    res.json(successResponse({ transactions: result, total: result.length }));
-  } catch (error) {
-    console.error('Get fuel transactions error:', error);
-    res.status(500).json(errorResponse('Failed to fetch fuel transactions'));
-  }
-});
-
-// Create fuel transaction
-router.post('/transactions', async (req, res) => {
+// Create fuel record - RETURNS OBJECT
+router.post('/', async (req, res) => {
   const {
-    vehicleId, fuelDate, cardNum, cardName,
-    pastMileage, currentMileage, quantityLiters, amount, place
+    fuel_date, vehicle_id, card_num, card_name,
+    past_mileage, current_mileage, quantity_liters, amount, place
   } = req.body;
 
   // Validation
-  if (!vehicleId || !fuelDate || !pastMileage || !currentMileage || !quantityLiters || !amount) {
-    return res.status(400).json(errorResponse('Missing required fields',
-      { required: ['vehicleId', 'fuelDate', 'pastMileage', 'currentMileage', 'quantityLiters', 'amount'] }
-    ));
+  if (!fuel_date || !vehicle_id || !past_mileage || !current_mileage || !quantity_liters || !amount) {
+    return res.status(400).json({ 
+      error: 'Missing required fields',
+      required: ['fuel_date', 'vehicle_id', 'past_mileage', 'current_mileage', 'quantity_liters', 'amount']
+    });
   }
 
   // Validate mileage progression
-  if (parseInt(currentMileage) <= parseInt(pastMileage)) {
-    return res.status(400).json(errorResponse('Current mileage must be greater than past mileage'));
+  if (parseInt(current_mileage) <= parseInt(past_mileage)) {
+    return res.status(400).json({ 
+      error: 'Current mileage must be greater than past mileage' 
+    });
   }
 
   try {
     // Calculate metrics
-    const distance = parseInt(currentMileage) - parseInt(pastMileage);
-    const kmPerLiter = distance > 0 && quantityLiters > 0 ? (distance / parseFloat(quantityLiters)).toFixed(2) : 0;
-    const costPerKm = distance > 0 && amount > 0 ? (parseFloat(amount) / distance).toFixed(4) : 0;
+    const distance = parseInt(current_mileage) - parseInt(past_mileage);
+    const km_per_liter = distance > 0 && quantity_liters > 0 ? (distance / parseFloat(quantity_liters)).toFixed(2) : 0;
+    const cost_per_km = distance > 0 && amount > 0 ? (parseFloat(amount) / distance).toFixed(4) : 0;
 
     const id = uuidv4();
     
@@ -129,10 +87,10 @@ router.post('/transactions', async (req, res) => {
        current_mileage, distance_km, quantity_liters, km_per_liter, amount, cost_per_km, place)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     `, [
-      id, fuelDate, vehicleId, cardNum || '', cardName || '', 
-      parseInt(pastMileage), parseInt(currentMileage), 
-      distance, parseFloat(quantityLiters), kmPerLiter, 
-      parseFloat(amount), costPerKm, place || ''
+      id, fuel_date, vehicle_id, card_num || '', card_name || '', 
+      parseInt(past_mileage), parseInt(current_mileage), 
+      distance, parseFloat(quantity_liters), km_per_liter, 
+      parseFloat(amount), cost_per_km, place || ''
     ]);
 
     // Update vehicle current mileage
@@ -140,7 +98,7 @@ router.post('/transactions', async (req, res) => {
       UPDATE vehicles 
       SET current_mileage = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2
-    `, [parseInt(currentMileage), vehicleId]);
+    `, [parseInt(current_mileage), vehicle_id]);
 
     const result = await query(`
       SELECT f.*, v.registration_num 
@@ -149,19 +107,71 @@ router.post('/transactions', async (req, res) => {
       WHERE f.id = $1
     `, [id]);
     
-    res.status(201).json(successResponse(result[0], 'Fuel transaction created'));
+    res.status(201).json(result[0]);
   } catch (error: any) {
-    console.error('Create fuel transaction error:', error);
-    res.status(500).json(errorResponse('Failed to create fuel transaction: ' + error.message));
+    console.error('Create fuel record error:', error);
+    res.status(500).json({ error: 'Failed to create fuel record: ' + error.message });
+  }
+});
+
+// Update fuel record
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const {
+    fuel_date, card_num, card_name,
+    past_mileage, current_mileage, quantity_liters, amount, place
+  } = req.body;
+
+  try {
+    // Calculate new metrics
+    const distance = parseInt(current_mileage) - parseInt(past_mileage);
+    const km_per_liter = distance > 0 && quantity_liters > 0 ? (distance / parseFloat(quantity_liters)).toFixed(2) : 0;
+    const cost_per_km = distance > 0 && amount > 0 ? (parseFloat(amount) / distance).toFixed(4) : 0;
+
+    await query(`
+      UPDATE fuel_records 
+      SET fuel_date = $1, card_num = $2, card_name = $3,
+          past_mileage = $4, current_mileage = $5, distance_km = $6,
+          quantity_liters = $7, km_per_liter = $8, amount = $9, cost_per_km = $10, place = $11
+      WHERE id = $12
+    `, [
+      fuel_date, card_num, card_name, past_mileage, current_mileage,
+      distance, quantity_liters, km_per_liter, amount, cost_per_km, place, id
+    ]);
+
+    const result = await query(`
+      SELECT f.*, v.registration_num 
+      FROM fuel_records f
+      LEFT JOIN vehicles v ON v.id = f.vehicle_id
+      WHERE f.id = $1
+    `, [id]);
+    
+    res.json(result[0]);
+  } catch (error) {
+    console.error('Update fuel record error:', error);
+    res.status(500).json({ error: 'Failed to update fuel record' });
+  }
+});
+
+// Delete fuel record
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    await query('DELETE FROM fuel_records WHERE id = $1', [id]);
+    res.json({ message: 'Fuel record deleted' });
+  } catch (error) {
+    console.error('Delete fuel record error:', error);
+    res.status(500).json({ error: 'Failed to delete fuel record' });
   }
 });
 
 // ==================== FUEL CARDS ====================
 
-// Get all fuel cards
+// Get all fuel cards - RETURNS RAW ARRAY
 router.get('/cards', async (req: any, res) => {
   try {
-    // Check if fuel_cards table exists, if not return empty array
+    // Check if fuel_cards table exists
     const tableCheck = await query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
@@ -184,7 +194,7 @@ router.get('/cards', async (req: any, res) => {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      return res.json(successResponse({ cards: [], total: 0 }));
+      return res.json([]);
     }
     
     const result = await query(`
@@ -194,19 +204,20 @@ router.get('/cards', async (req: any, res) => {
       ORDER BY fc.created_at DESC
     `);
     
-    res.json(successResponse({ cards: result, total: result.length }));
+    // Return raw array for frontend compatibility
+    res.json(result);
   } catch (error) {
     console.error('Get fuel cards error:', error);
-    res.status(500).json(errorResponse('Failed to fetch fuel cards'));
+    res.status(500).json({ error: 'Failed to fetch fuel cards' });
   }
 });
 
 // Create fuel card
 router.post('/cards', async (req, res) => {
-  const { cardNum, cardName, assignedVehicleId, monthlyLimit } = req.body;
+  const { card_num, card_name, assigned_vehicle_id, monthly_limit } = req.body;
   
-  if (!cardNum) {
-    return res.status(400).json(errorResponse('Card number is required'));
+  if (!card_num) {
+    return res.status(400).json({ error: 'Card number is required' });
   }
   
   try {
@@ -229,40 +240,40 @@ router.post('/cards', async (req, res) => {
     await query(`
       INSERT INTO fuel_cards (id, card_num, card_name, assigned_vehicle_id, monthly_limit)
       VALUES ($1, $2, $3, $4, $5)
-    `, [id, cardNum, cardName || '', assignedVehicleId || null, monthlyLimit || null]);
+    `, [id, card_num, card_name || '', assigned_vehicle_id || null, monthly_limit || null]);
     
     const result = await query('SELECT * FROM fuel_cards WHERE id = $1', [id]);
-    res.status(201).json(successResponse(result[0], 'Fuel card created'));
+    res.status(201).json(result[0]);
   } catch (error: any) {
     console.error('Create fuel card error:', error);
-    res.status(500).json(errorResponse('Failed to create fuel card: ' + error.message));
+    res.status(500).json({ error: 'Failed to create fuel card: ' + error.message });
   }
 });
 
 // Update fuel card
 router.put('/cards/:id', async (req, res) => {
   const { id } = req.params;
-  const { cardNum, cardName, assignedVehicleId, monthlyLimit, status } = req.body;
+  const { card_num, card_name, assigned_vehicle_id, monthly_limit, status } = req.body;
   
   try {
     const updates: string[] = [];
     const params: any[] = [];
     
-    if (cardNum !== undefined) {
+    if (card_num !== undefined) {
       updates.push(`card_num = $${params.length + 1}`);
-      params.push(cardNum);
+      params.push(card_num);
     }
-    if (cardName !== undefined) {
+    if (card_name !== undefined) {
       updates.push(`card_name = $${params.length + 1}`);
-      params.push(cardName);
+      params.push(card_name);
     }
-    if (assignedVehicleId !== undefined) {
+    if (assigned_vehicle_id !== undefined) {
       updates.push(`assigned_vehicle_id = $${params.length + 1}`);
-      params.push(assignedVehicleId);
+      params.push(assigned_vehicle_id);
     }
-    if (monthlyLimit !== undefined) {
+    if (monthly_limit !== undefined) {
       updates.push(`monthly_limit = $${params.length + 1}`);
-      params.push(monthlyLimit);
+      params.push(monthly_limit);
     }
     if (status !== undefined) {
       updates.push(`status = $${params.length + 1}`);
@@ -270,7 +281,7 @@ router.put('/cards/:id', async (req, res) => {
     }
     
     if (updates.length === 0) {
-      return res.status(400).json(errorResponse('No fields to update'));
+      return res.status(400).json({ error: 'No fields to update' });
     }
     
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
@@ -281,16 +292,16 @@ router.put('/cards/:id', async (req, res) => {
     `, params);
     
     const result = await query('SELECT * FROM fuel_cards WHERE id = $1', [id]);
-    res.json(successResponse(result[0], 'Fuel card updated'));
+    res.json(result[0]);
   } catch (error: any) {
     console.error('Update fuel card error:', error);
-    res.status(500).json(errorResponse('Failed to update fuel card: ' + error.message));
+    res.status(500).json({ error: 'Failed to update fuel card: ' + error.message });
   }
 });
 
-// ==================== ANALYTICS & STATS ====================
+// ==================== ANALYTICS ====================
 
-// Get fuel analytics summary
+// Get fuel analytics - RETURNS OBJECT (not array)
 router.get('/analytics', async (req: any, res) => {
   try {
     const { start_date, end_date, vehicle_id } = req.query;
@@ -371,7 +382,7 @@ router.get('/analytics', async (req: any, res) => {
       ORDER BY avg_efficiency ASC
     `, vehicleParams);
     
-    res.json(successResponse({
+    res.json({
       summary: summaryResult[0] || {
         total_liters: 0, total_cost: 0, total_distance: 0,
         avg_efficiency: 0, avg_cost_per_km: 0, record_count: 0
@@ -386,44 +397,14 @@ router.get('/analytics', async (req: any, res) => {
         severity: 'warning',
         avg_efficiency: parseFloat(a.avg_efficiency)
       }))
-    }));
+    });
   } catch (error) {
     console.error('Analytics error:', error);
-    res.status(500).json(errorResponse('Failed to fetch analytics'));
+    res.status(500).json({ error: 'Failed to fetch analytics' });
   }
 });
 
-// Get fuel stats (alias for frontend)
-router.get('/stats', async (req: any, res) => {
-  try {
-    const { dateFrom, dateTo } = req.query;
-    
-    const end = dateTo || new Date().toISOString().split('T')[0];
-    const start = dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    const summaryResult = await query(`
-      SELECT 
-        SUM(f.quantity_liters) as total_liters,
-        SUM(f.amount) as total_cost,
-        SUM(f.distance_km) as total_distance,
-        AVG(f.km_per_liter) as avg_efficiency,
-        AVG(f.cost_per_km) as avg_cost_per_km,
-        COUNT(*) as transaction_count
-      FROM fuel_records f
-      WHERE f.fuel_date >= $1 AND f.fuel_date <= $2
-    `, [start, end]);
-    
-    res.json(successResponse(summaryResult[0] || {
-      total_liters: 0, total_cost: 0, total_distance: 0,
-      avg_efficiency: 0, avg_cost_per_km: 0, transaction_count: 0
-    }));
-  } catch (error) {
-    console.error('Stats error:', error);
-    res.status(500).json(errorResponse('Failed to fetch fuel stats'));
-  }
-});
-
-// Get fuel efficiency data
+// Get fuel efficiency - RETURNS RAW ARRAY
 router.get('/efficiency', async (req: any, res) => {
   try {
     const result = await query(`
@@ -445,21 +426,20 @@ router.get('/efficiency', async (req: any, res) => {
       ORDER BY avg_km_per_liter DESC
     `);
     
-    res.json(successResponse(result.map((r: any) => ({
+    // Return raw array for frontend compatibility
+    res.json(result.map((r: any) => ({
       registration_num: r.registration_num,
       avg_km_per_liter: parseFloat(r.avg_km_per_liter) || 0,
       target_rate: parseFloat(r.target_rate) || 0,
       total_distance: parseInt(r.total_distance) || 0,
       total_fuel: parseFloat(r.total_fuel) || 0,
       variance: parseFloat(r.variance) || 0
-    }))));
+    })));
   } catch (error) {
     console.error('Efficiency error:', error);
-    res.status(500).json(errorResponse('Failed to fetch efficiency data'));
+    res.status(500).json({ error: 'Failed to fetch efficiency data' });
   }
 });
-
-// ==================== LEGACY ENDPOINTS ====================
 
 // Get vehicle fuel trends
 router.get('/trends/:vehicleId', async (req: any, res) => {
@@ -482,122 +462,10 @@ router.get('/trends/:vehicleId', async (req: any, res) => {
       ORDER BY month ASC
     `, [vehicleId]);
     
-    res.json(successResponse(result));
+    res.json(result);
   } catch (error) {
     console.error('Trends error:', error);
-    res.status(500).json(errorResponse('Failed to fetch trends'));
-  }
-});
-
-// Create fuel record (legacy)
-router.post('/', async (req, res) => {
-  const {
-    fuel_date, vehicle_id, card_num, card_name,
-    past_mileage, current_mileage, quantity_liters, amount, place
-  } = req.body;
-
-  // Validation
-  if (!fuel_date || !vehicle_id || !past_mileage || !current_mileage || !quantity_liters || !amount) {
-    return res.status(400).json(errorResponse('Missing required fields',
-      { required: ['fuel_date', 'vehicle_id', 'past_mileage', 'current_mileage', 'quantity_liters', 'amount'] }
-    ));
-  }
-
-  // Validate mileage progression
-  if (parseInt(current_mileage) <= parseInt(past_mileage)) {
-    return res.status(400).json(errorResponse('Current mileage must be greater than past mileage'));
-  }
-
-  try {
-    // Calculate metrics
-    const distance = parseInt(current_mileage) - parseInt(past_mileage);
-    const km_per_liter = distance > 0 && quantity_liters > 0 ? (distance / parseFloat(quantity_liters)).toFixed(2) : 0;
-    const cost_per_km = distance > 0 && amount > 0 ? (parseFloat(amount) / distance).toFixed(4) : 0;
-
-    const id = uuidv4();
-    
-    await query(`
-      INSERT INTO fuel_records 
-      (id, fuel_date, vehicle_id, card_num, card_name, past_mileage, 
-       current_mileage, distance_km, quantity_liters, km_per_liter, amount, cost_per_km, place)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    `, [
-      id, fuel_date, vehicle_id, card_num || '', card_name || '', 
-      parseInt(past_mileage), parseInt(current_mileage), 
-      distance, parseFloat(quantity_liters), km_per_liter, 
-      parseFloat(amount), cost_per_km, place || ''
-    ]);
-
-    // Update vehicle current mileage
-    await query(`
-      UPDATE vehicles 
-      SET current_mileage = $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [parseInt(current_mileage), vehicle_id]);
-
-    const result = await query(`
-      SELECT f.*, v.registration_num 
-      FROM fuel_records f
-      LEFT JOIN vehicles v ON v.id = f.vehicle_id
-      WHERE f.id = $1
-    `, [id]);
-    
-    res.status(201).json(successResponse(result[0], 'Fuel record created'));
-  } catch (error: any) {
-    console.error('Create fuel record error:', error);
-    res.status(500).json(errorResponse('Failed to create fuel record: ' + error.message));
-  }
-});
-
-// Update fuel record
-router.put('/:id', async (req, res) => {
-  const { id } = req.params;
-  const {
-    fuel_date, card_num, card_name,
-    past_mileage, current_mileage, quantity_liters, amount, place
-  } = req.body;
-
-  try {
-    // Calculate new metrics
-    const distance = parseInt(current_mileage) - parseInt(past_mileage);
-    const km_per_liter = distance > 0 && quantity_liters > 0 ? (distance / parseFloat(quantity_liters)).toFixed(2) : 0;
-    const cost_per_km = distance > 0 && amount > 0 ? (parseFloat(amount) / distance).toFixed(4) : 0;
-
-    await query(`
-      UPDATE fuel_records 
-      SET fuel_date = $1, card_num = $2, card_name = $3,
-          past_mileage = $4, current_mileage = $5, distance_km = $6,
-          quantity_liters = $7, km_per_liter = $8, amount = $9, cost_per_km = $10, place = $11
-      WHERE id = $12
-    `, [
-      fuel_date, card_num, card_name, past_mileage, current_mileage,
-      distance, quantity_liters, km_per_liter, amount, cost_per_km, place, id
-    ]);
-
-    const result = await query(`
-      SELECT f.*, v.registration_num 
-      FROM fuel_records f
-      LEFT JOIN vehicles v ON v.id = f.vehicle_id
-      WHERE f.id = $1
-    `, [id]);
-    
-    res.json(successResponse(result[0], 'Fuel record updated'));
-  } catch (error) {
-    console.error('Update fuel record error:', error);
-    res.status(500).json(errorResponse('Failed to update fuel record'));
-  }
-});
-
-// Delete fuel record
-router.delete('/:id', async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    await query('DELETE FROM fuel_records WHERE id = $1', [id]);
-    res.json(successResponse(null, 'Fuel record deleted'));
-  } catch (error) {
-    console.error('Delete fuel record error:', error);
-    res.status(500).json(errorResponse('Failed to delete fuel record'));
+    res.status(500).json({ error: 'Failed to fetch trends' });
   }
 });
 
