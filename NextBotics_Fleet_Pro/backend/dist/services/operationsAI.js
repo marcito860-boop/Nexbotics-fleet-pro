@@ -5,7 +5,7 @@ const database_1 = require("../database");
 const index_1 = require("../index");
 // Calculate predictive maintenance scores
 const analyzeVehicleHealth = async (vehicleId) => {
-    const whereClause = vehicleId ? 'WHERE v.id = $1' : '';
+    const whereClause = vehicleId ? 'WHERE v.id = $1 AND v.deleted_at IS NULL AND v.status = \'Active\'' : 'WHERE v.deleted_at IS NULL AND v.status = \'Active\'';
     const params = vehicleId ? [vehicleId] : [];
     const vehicles = await (0, database_1.query)(`
     SELECT 
@@ -34,8 +34,6 @@ const analyzeVehicleHealth = async (vehicleId) => {
       (SELECT COALESCE(SUM(cost), 0) FROM repairs WHERE vehicle_id = v.id AND date_in > CURRENT_DATE - INTERVAL '90 days') as repair_costs_90d
     FROM vehicles v
     ${whereClause}
-    AND v.deleted_at IS NULL
-    AND v.status = 'Active'
   `, params);
     const analyzeVehicle = (v) => {
         let healthScore = 100;

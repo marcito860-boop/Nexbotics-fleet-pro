@@ -15,7 +15,7 @@ interface VehicleHealth {
 
 // Calculate predictive maintenance scores
 export const analyzeVehicleHealth = async (vehicleId?: string): Promise<VehicleHealth | VehicleHealth[] | null> => {
-  const whereClause = vehicleId ? 'WHERE v.id = $1' : '';
+  const whereClause = vehicleId ? 'WHERE v.id = $1 AND v.deleted_at IS NULL AND v.status = \'Active\'' : 'WHERE v.deleted_at IS NULL AND v.status = \'Active\'';
   const params = vehicleId ? [vehicleId] : [];
   
   const vehicles = await query(`
@@ -45,8 +45,6 @@ export const analyzeVehicleHealth = async (vehicleId?: string): Promise<VehicleH
       (SELECT COALESCE(SUM(cost), 0) FROM repairs WHERE vehicle_id = v.id AND date_in > CURRENT_DATE - INTERVAL '90 days') as repair_costs_90d
     FROM vehicles v
     ${whereClause}
-    AND v.deleted_at IS NULL
-    AND v.status = 'Active'
   `, params);
   
   const analyzeVehicle = (v: any): VehicleHealth => {
