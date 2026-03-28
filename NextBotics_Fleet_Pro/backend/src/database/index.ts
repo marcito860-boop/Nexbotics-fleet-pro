@@ -1455,6 +1455,40 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   } catch (err: any) {
     console.error('❌ Migration failed (service):', err.message);
   }
+
+  try {
+    // COMPREHENSIVE FIX: Add all missing vehicle columns
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS minor_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS medium_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS major_service_interval INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS target_consumption_rate DECIMAL(5,2)`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS year_of_manufacture INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS year_of_purchase INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS replacement_mileage INTEGER`);
+    await pool.query(`ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS replacement_age INTEGER`);
+    console.log('✅ All vehicle columns verified');
+  } catch (err: any) {
+    console.error('❌ Migration failed (vehicle columns):', err.message);
+  }
+
+  try {
+    // Add missing staff columns
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS staff_no VARCHAR(50)`);
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS safety_score INTEGER DEFAULT 100`);
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS comments TEXT`);
+    console.log('✅ Staff columns verified');
+  } catch (err: any) {
+    console.error('❌ Migration failed (staff columns):', err.message);
+  }
+
+  try {
+    // Add missing routes columns
+    await pool.query(`ALTER TABLE routes ADD COLUMN IF NOT EXISTS target_km DECIMAL(10,2)`);
+    await pool.query(`ALTER TABLE routes ADD COLUMN IF NOT EXISTS actual_km DECIMAL(10,2)`);
+    console.log('✅ Routes columns verified');
+  } catch (err: any) {
+    console.error('❌ Migration failed (routes columns):', err.message);
+  }
   
   console.log('🔧 Migrations complete');
 };
