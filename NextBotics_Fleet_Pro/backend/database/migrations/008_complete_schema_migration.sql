@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS geofences (
 CREATE TABLE IF NOT EXISTS companies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
+  slug VARCHAR(100) UNIQUE NOT NULL,
   email VARCHAR(255),
   phone VARCHAR(50),
   address TEXT,
@@ -229,13 +230,32 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 
 -- Insert default company if not exists
-INSERT INTO companies (id, name, email)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Default Company', 'admin@fleet.local')
+INSERT INTO companies (id, name, slug, email)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Default Company', 'default-company', 'admin@fleet.local')
 ON CONFLICT (id) DO NOTHING;
 
 -- Alter users.company_id to allow NULL (in case it has NOT NULL constraint)
-ALTER TABLE users ALTER COLUMN company_id DROP NOT NULL;
+DO $$
+BEGIN
+    ALTER TABLE users ALTER COLUMN company_id DROP NOT NULL;
+EXCEPTION
+    WHEN others THEN
+        NULL;
+END $$;
 
 -- Also ensure first_name and last_name allow NULL
-ALTER TABLE users ALTER COLUMN first_name DROP NOT NULL;
-ALTER TABLE users ALTER COLUMN last_name DROP NOT NULL;
+DO $$
+BEGIN
+    ALTER TABLE users ALTER COLUMN first_name DROP NOT NULL;
+EXCEPTION
+    WHEN others THEN
+        NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER TABLE users ALTER COLUMN last_name DROP NOT NULL;
+EXCEPTION
+    WHEN others THEN
+        NULL;
+END $$;

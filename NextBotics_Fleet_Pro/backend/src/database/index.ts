@@ -856,10 +856,10 @@ const createIndexes = async (poolRef: any) => {
       const hashedPassword = bcrypt.hashSync('admin123', 10);
       
       if (adminResult.rows.length === 0) {
-        // Create new admin user without company_id (will be NULL)
+        // Create new admin user with company_id reference
         await pool.query(
-          'INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6)',
-          [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin', 'Admin', 'User']
+          'INSERT INTO users (id, email, password_hash, role, company_id, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [uuidv4(), 'admin@fleet.local', hashedPassword, 'admin', '00000000-0000-0000-0000-000000000001', 'Admin', 'User']
         );
         console.log('✅ Default admin user created: admin@fleet.local / admin123');
       } else {

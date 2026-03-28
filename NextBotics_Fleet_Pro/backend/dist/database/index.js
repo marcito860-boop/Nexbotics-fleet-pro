@@ -828,8 +828,8 @@ const createIndexes = async (poolRef) => {
             const adminResult = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', ['admin@fleet.local']);
             const hashedPassword = bcryptjs_1.default.hashSync('admin123', 10);
             if (adminResult.rows.length === 0) {
-                // Create new admin user without company_id (will be NULL)
-                await pool.query('INSERT INTO users (id, email, password_hash, role, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6)', [(0, uuid_1.v4)(), 'admin@fleet.local', hashedPassword, 'admin', 'Admin', 'User']);
+                // Create new admin user with company_id reference
+                await pool.query('INSERT INTO users (id, email, password_hash, role, company_id, first_name, last_name) VALUES ($1, $2, $3, $4, $5, $6, $7)', [(0, uuid_1.v4)(), 'admin@fleet.local', hashedPassword, 'admin', '00000000-0000-0000-0000-000000000001', 'Admin', 'User']);
                 console.log('✅ Default admin user created: admin@fleet.local / admin123');
             }
             else {
