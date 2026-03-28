@@ -6,8 +6,8 @@ import emailService from '../services/email';
 const router = Router();
 
 // Helper to wrap responses
-const successResponse = (data: any, message?: string) =>> ({ success: true, data, message });
-const errorResponse = (error: string, details?: any) =>> ({ success: false, error, details });
+const successResponse = (data: any, message?: string) => ({ success: true, data, message });
+const errorResponse = (error: string, details?: any) => ({ success: false, error, details });
 
 // ==================== REQUISITION ROUTES ====================
 
