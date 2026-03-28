@@ -1,6 +1,7 @@
 -- ============================================
 -- COMPREHENSIVE SCHEMA MIGRATION
 -- Fixes ALL missing columns for Render deployment
+-- NOTE: Indexes are handled separately in createIndexes()
 -- ============================================
 
 -- 1. VEHICLES TABLE - Add all missing columns
@@ -167,7 +168,13 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS customer_id UUID;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS job_card_id UUID;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS vehicle_id UUID;
 
--- 11. GPS TRACKING TABLES (Create if not exist) - NO FK constraints to avoid dependency issues
+-- 11. USERS - Add missing columns for Render compatibility
+ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id UUID;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
+
+-- 12. GPS TRACKING TABLES (Create if not exist) - NO FK constraints to avoid dependency issues
 CREATE TABLE IF NOT EXISTS gps_tracking (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   vehicle_id UUID,
@@ -209,55 +216,3 @@ CREATE TABLE IF NOT EXISTS geofences (
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
--- ============================================
--- INDEXES
--- ============================================
-
--- Vehicles indexes
-CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
-CREATE INDEX IF NOT EXISTS idx_vehicles_department ON vehicles(department);
-CREATE INDEX IF NOT EXISTS idx_vehicles_deleted_at ON vehicles(deleted_at);
-CREATE INDEX IF NOT EXISTS idx_vehicles_registration ON vehicles(registration_num);
-
--- Staff indexes
-CREATE INDEX IF NOT EXISTS idx_staff_email ON staff(email);
-CREATE INDEX IF NOT EXISTS idx_staff_role ON staff(role);
-CREATE INDEX IF NOT EXISTS idx_staff_department ON staff(department);
-CREATE INDEX IF NOT EXISTS idx_staff_deleted_at ON staff(deleted_at);
-
--- Routes indexes
-CREATE INDEX IF NOT EXISTS idx_routes_vehicle_id ON routes(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_routes_driver1_id ON routes(driver1_id);
-CREATE INDEX IF NOT EXISTS idx_routes_date ON routes(route_date);
-
--- Fuel records indexes
-CREATE INDEX IF NOT EXISTS idx_fuel_vehicle_id ON fuel_records(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_fuel_date ON fuel_records(fuel_date);
-
--- Requisitions indexes
-CREATE INDEX IF NOT EXISTS idx_requisitions_status ON requisitions(status);
-CREATE INDEX IF NOT EXISTS idx_requisitions_requested_by ON requisitions(requested_by);
-CREATE INDEX IF NOT EXISTS idx_requisitions_vehicle_id ON requisitions(vehicle_id);
-
--- Repairs indexes
-CREATE INDEX IF NOT EXISTS idx_repairs_vehicle_id ON repairs(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
-
--- Accidents indexes
-CREATE INDEX IF NOT EXISTS idx_accidents_vehicle_id ON accidents(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_accidents_driver_id ON accidents(driver_id);
-CREATE INDEX IF NOT EXISTS idx_accidents_date ON accidents(accident_date);
-CREATE INDEX IF NOT EXISTS idx_accidents_status ON accidents(status);
-
--- Job cards indexes
-CREATE INDEX IF NOT EXISTS idx_job_cards_vehicle_id ON job_cards(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_job_cards_status ON job_cards(status);
-CREATE INDEX IF NOT EXISTS idx_job_cards_number ON job_cards(job_card_number);
-
--- GPS indexes
-CREATE INDEX IF NOT EXISTS idx_gps_tracking_vehicle_id ON gps_tracking(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_gps_tracking_last_updated ON gps_tracking(last_updated);
-CREATE INDEX IF NOT EXISTS idx_gps_history_vehicle_id ON gps_history(vehicle_id);
-CREATE INDEX IF NOT EXISTS idx_gps_history_recorded_at ON gps_history(recorded_at);
-CREATE INDEX IF NOT EXISTS idx_geofences_vehicle_id ON geofences(vehicle_id);
