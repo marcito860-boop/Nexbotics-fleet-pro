@@ -319,7 +319,13 @@ export default function FuelPage() {
     const avgEfficiency = totalLiters > 0 ? totalDistance / totalLiters : 0;
     const avgCostPerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
     
-    return { totalCost, totalLiters, totalDistance, avgEfficiency, avgCostPerLiter };
+    return { 
+      totalCost: totalCost || 0, 
+      totalLiters: totalLiters || 0, 
+      totalDistance: totalDistance || 0, 
+      avgEfficiency: avgEfficiency || 0, 
+      avgCostPerLiter: avgCostPerLiter || 0 
+    };
   }, [records]);
 
   // Chart data preparation
@@ -582,18 +588,18 @@ export default function FuelPage() {
                         <tr key={r.id} className="border-t hover:bg-slate-50">
                           <td className="p-3">{r.fuel_date}</td>
                           <td className="p-3 font-medium">{r.registration_num}</td>
-                          <td className="p-3">{r.distance_km?.toLocaleString()} km</td>
-                          <td className="p-3">{r.quantity_liters}</td>
+                          <td className="p-3">{(r.distance_km || 0).toLocaleString()} km</td>
+                          <td className="p-3">{r.quantity_liters || 0}</td>
                           <td className="p-3">
                             <span className={`px-2 py-1 rounded text-xs ${
-                              r.km_per_liter >= 8 ? 'bg-green-100 text-green-800' :
-                              r.km_per_liter >= 5 ? 'bg-yellow-100 text-yellow-800' :
+                              (r.km_per_liter || 0) >= 8 ? 'bg-green-100 text-green-800' :
+                              (r.km_per_liter || 0) >= 5 ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                             }`}>
-                              {r.km_per_liter?.toFixed(2)}
+                              {(r.km_per_liter || 0).toFixed(2)}
                             </span>
                           </td>
-                          <td className="p-3">${parseFloat(r.amount as any).toFixed(2)}</td>
+                          <td className="p-3">${(parseFloat(r.amount as any) || 0).toFixed(2)}</td>
                           <td className="p-3 text-slate-500">{r.place || '-'}</td>
                         </tr>
                       ))
@@ -707,7 +713,7 @@ export default function FuelPage() {
                         <div className="mb-2">
                           <div className="flex justify-between text-sm mb-1">
                             <span className="text-slate-500">Monthly Usage</span>
-                            <span className="font-medium">${card.current_month_usage?.toFixed(2)} / ${card.monthly_limit}</span>
+                            <span className="font-medium">${(card.current_month_usage || 0).toFixed(2)} / ${card.monthly_limit}</span>
                           </div>
                           <div className="w-full bg-slate-200 rounded-full h-2">
                             <div
@@ -788,17 +794,17 @@ export default function FuelPage() {
                       efficiencyData.map(d => (
                         <tr key={d.registration_num} className="border-t hover:bg-slate-50">
                           <td className="p-3 font-medium">{d.registration_num}</td>
-                          <td className="p-3">{parseFloat(d.avg_km_per_liter as any)?.toFixed(2)}</td>
-                          <td className="p-3">{d.target_rate}</td>
+                          <td className="p-3">{(parseFloat(d.avg_km_per_liter as any) || 0).toFixed(2)}</td>
+                          <td className="p-3">{d.target_rate || 0}</td>
                           <td className="p-3">
                             <span className={`px-2 py-1 rounded text-xs ${
-                              d.variance >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              (d.variance || 0) >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                             }`}>
-                              {d.variance > 0 ? '+' : ''}{d.variance?.toFixed(1)}%
+                              {(d.variance || 0) > 0 ? '+' : ''}{(d.variance || 0).toFixed(1)}%
                             </span>
                           </td>
-                          <td className="p-3">{d.total_distance?.toLocaleString()} km</td>
-                          <td className="p-3">{d.total_fuel?.toFixed(1)} L</td>
+                          <td className="p-3">{(d.total_distance || 0).toLocaleString()} km</td>
+                          <td className="p-3">{(d.total_fuel || 0).toFixed(1)} L</td>
                         </tr>
                       ))
                     )}
