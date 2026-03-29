@@ -206,6 +206,8 @@ router.delete('/:id', async (req, res) => {
 // Get all fuel cards - RETURNS RAW ARRAY
 router.get('/cards', async (req: any, res) => {
   try {
+    const companyId = req.user?.companyId;
+    
     // Check if fuel_cards table exists
     const tableCheck = await query(`
       SELECT EXISTS (
@@ -219,14 +221,16 @@ router.get('/cards', async (req: any, res) => {
       await query(`
         CREATE TABLE IF NOT EXISTS fuel_cards (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          card_num VARCHAR(100) UNIQUE NOT NULL,
+          company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+          card_num VARCHAR(100) NOT NULL,
           card_name VARCHAR(255),
           assigned_vehicle_id UUID REFERENCES vehicles(id),
           monthly_limit DECIMAL(10,2),
           current_month_usage DECIMAL(10,2) DEFAULT 0,
           status VARCHAR(20) DEFAULT 'active',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(company_id, card_num)
         )
       `);
       return res.json([]);
@@ -234,6 +238,7 @@ router.get('/cards', async (req: any, res) => {
     
     // Add missing columns if they don't exist
     try {
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_num VARCHAR(100)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_name VARCHAR(255)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS assigned_vehicle_id UUID REFERENCES vehicles(id)`);
@@ -244,12 +249,14 @@ router.get('/cards', async (req: any, res) => {
       console.log('Columns might already exist');
     }
     
+    // Filter by company_id for multi-tenant security
     const result = await query(`
       SELECT fc.*, v.registration_num
       FROM fuel_cards fc
       LEFT JOIN vehicles v ON v.id = fc.assigned_vehicle_id
+      WHERE fc.company_id = $1
       ORDER BY fc.created_at DESC
-    `);
+    `, [companyId]);
     
     // Return raw array for frontend compatibility
     res.json(result);
@@ -260,8 +267,9 @@ router.get('/cards', async (req: any, res) => {
 });
 
 // Create fuel card
-router.post('/cards', async (req, res) => {
+router.post('/cards', async (req: any, res) => {
   const { card_num, card_name, assigned_vehicle_id, monthly_limit } = req.body;
+  const companyId = req.user?.companyId;
 
   if (!card_num) {
     return res.status(400).json({ error: 'Card number is required' });
@@ -272,19 +280,22 @@ router.post('/cards', async (req, res) => {
     await query(`
       CREATE TABLE IF NOT EXISTS fuel_cards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        card_num VARCHAR(100) UNIQUE NOT NULL,
+        company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+        card_num VARCHAR(100) NOT NULL,
         card_name VARCHAR(255),
         assigned_vehicle_id UUID REFERENCES vehicles(id),
         monthly_limit DECIMAL(10,2),
         current_month_usage DECIMAL(10,2) DEFAULT 0,
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(company_id, card_num)
       )
     `);
 
     // Add missing columns if they don't exist
     try {
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_num VARCHAR(100)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_name VARCHAR(255)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS assigned_vehicle_id UUID REFERENCES vehicles(id)`);
@@ -297,9 +308,9 @@ router.post('/cards', async (req, res) => {
 
     const id = uuidv4();
     await query(`
-      INSERT INTO fuel_cards (id, card_num, card_name, assigned_vehicle_id, monthly_limit)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [id, card_num, card_name || '', assigned_vehicle_id || null, monthly_limit || null]);
+      INSERT INTO fuel_cards (id, company_id, card_num, card_name, assigned_vehicle_id, monthly_limit)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [id, companyId, card_num, card_name || '', assigned_vehicle_id || null, monthly_limit || null]);
 
     const result = await query('SELECT * FROM fuel_cards WHERE id = $1', [id]);
     res.status(201).json(result[0]);
