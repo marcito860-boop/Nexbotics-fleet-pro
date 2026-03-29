@@ -58,10 +58,13 @@ router.post('/', async (req, res) => {
     past_mileage, current_mileage, quantity_liters, amount, place
   } = req.body;
 
+  console.log('Fuel transaction request:', req.body);
+
   // Validation
   if (!fuel_date || !vehicle_id || !past_mileage || !current_mileage || !quantity_liters || !amount) {
     return res.status(400).json({ 
       error: 'Missing required fields',
+      received: { fuel_date, vehicle_id, past_mileage, current_mileage, quantity_liters, amount },
       required: ['fuel_date', 'vehicle_id', 'past_mileage', 'current_mileage', 'quantity_liters', 'amount']
     });
   }
@@ -69,7 +72,8 @@ router.post('/', async (req, res) => {
   // Validate mileage progression
   if (parseInt(current_mileage) <= parseInt(past_mileage)) {
     return res.status(400).json({ 
-      error: 'Current mileage must be greater than past mileage' 
+      error: 'Current mileage must be greater than past mileage',
+      past_mileage, current_mileage
     });
   }
 
@@ -107,10 +111,11 @@ router.post('/', async (req, res) => {
       WHERE f.id = $1
     `, [id]);
     
+    console.log('Fuel transaction created:', result[0]);
     res.status(201).json(result[0]);
   } catch (error: any) {
     console.error('Create fuel record error:', error);
-    res.status(500).json({ error: 'Failed to create fuel record: ' + error.message });
+    res.status(500).json({ error: 'Failed to create fuel record: ' + error.message, details: error });
   }
 });
 
