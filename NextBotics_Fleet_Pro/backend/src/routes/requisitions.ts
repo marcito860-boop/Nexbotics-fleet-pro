@@ -48,6 +48,7 @@ router.post('/', async (req: any, res) => {
   // If requested_by not provided, try to find staff by user's email
   let requesterId = normalizedData.requested_by;
   let staffEmail = null;
+  let staffCreationError = null;
   
   try {
     if (!requesterId && req.user?.email) {
@@ -67,17 +68,18 @@ router.post('/', async (req: any, res) => {
         : req.user.email.split('@')[0];
       
       await query(`
-        INSERT INTO staff (id, staff_name, email, role, department)
-        VALUES ($1, $2, $3, 'Staff', 'General')
+        INSERT INTO staff (id, staff_name, email, role, department, company_id)
+        VALUES ($1, $2, $3, 'Staff', 'General', $4)
         ON CONFLICT (email) DO UPDATE SET staff_name = EXCLUDED.staff_name
         RETURNING id, email
-      `, [newStaffId, staffName, req.user.email]);
+      `, [newStaffId, staffName, req.user.email, req.user.companyId]);
       
       requesterId = newStaffId;
       staffEmail = req.user.email;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error finding/creating staff:', err);
+    staffCreationError = err.message;
   }
 
   // Validation
@@ -92,7 +94,8 @@ router.post('/', async (req: any, res) => {
           hasDestination: !!normalizedData.destination,
           hasPurpose: !!normalizedData.purpose,
           hasTravelDate: !!normalizedData.travel_date,
-          user: req.user ? { id: req.user.userId, email: req.user.email } : null
+          user: req.user ? { id: req.user.userId, email: req.user.email, companyId: req.user.companyId } : null,
+          staffCreationError
         }
       }
     ));

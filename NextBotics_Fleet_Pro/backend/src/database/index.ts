@@ -56,6 +56,7 @@ const createTables = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS staff (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
       staff_no VARCHAR(50) UNIQUE,
       staff_name VARCHAR(255) NOT NULL,
       email VARCHAR(255),
@@ -72,6 +73,13 @@ const createTables = async () => {
       deleted_by UUID REFERENCES users(id)
     )
   `);
+  
+  // Add company_id column if it doesn't exist (migration for existing tables)
+  try {
+    await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
+  } catch (e) {
+    // Column might already exist
+  }
   
   // Driver behavior scores history
   await pool.query(`
@@ -746,6 +754,7 @@ const createIndexes = async (poolRef: any) => {
     
     // Staff indexes
     { name: 'idx_staff_email', table: 'staff', column: 'email' },
+    { name: 'idx_staff_company_id', table: 'staff', column: 'company_id' },
     { name: 'idx_staff_role', table: 'staff', column: 'role' },
     { name: 'idx_staff_department', table: 'staff', column: 'department' },
     { name: 'idx_staff_deleted_at', table: 'staff', column: 'deleted_at' },
