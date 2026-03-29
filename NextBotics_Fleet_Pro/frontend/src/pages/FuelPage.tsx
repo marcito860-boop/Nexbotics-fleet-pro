@@ -262,26 +262,34 @@ export default function FuelPage() {
   const submitCard = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        card_num: cardForm.card_num,
+        card_name: cardForm.card_name,
+        assigned_vehicle_id: cardForm.assigned_vehicle_id || null,
+        monthly_limit: parseFloat(cardForm.monthly_limit) || null
+      };
+      console.log('Submitting fuel card:', payload);
+      
       const res = await fetch(`${API_BASE_URL}/api/fuel/cards`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          card_num: cardForm.card_num,
-          card_name: cardForm.card_name,
-          assigned_vehicle_id: cardForm.assigned_vehicle_id || null,
-          monthly_limit: parseFloat(cardForm.monthly_limit) || null
-        })
+        body: JSON.stringify(payload)
       });
       
-      if (!res.ok) throw new Error('Failed to create fuel card');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Fuel card error:', errorData);
+        throw new Error(errorData.error || errorData.details?.error || `Failed: ${res.status}`);
+      }
       
       setShowCardForm(false);
       setCardForm({ card_num: '', card_name: '', assigned_vehicle_id: '', monthly_limit: '' });
       fetchFuelCards();
     } catch (err: any) {
+      console.error('Submit card error:', err);
       setError(err.message);
     }
   };
