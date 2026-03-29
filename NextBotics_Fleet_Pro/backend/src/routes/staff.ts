@@ -71,6 +71,80 @@ router.get('/drivers', async (req: any, res) => {
   }
 });
 
+// Create driver (maps frontend driver fields to staff fields)
+router.post('/drivers', async (req: any, res) => {
+  const {
+    firstName, lastName, email, phone,
+    licenseNumber, licenseCategory, licenseExpiry
+  } = req.body;
+
+  const companyId = req.user?.companyId;
+
+  if (!firstName || !lastName) {
+    return res.status(400).json({ error: 'First name and last name are required' });
+  }
+
+  try {
+    const id = uuidv4();
+    const staffName = `${firstName} ${lastName}`;
+    const staffNo = licenseNumber || `DRV-${Date.now()}`;
+
+    await query(`
+      INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, role, comments, company_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [id, staffNo, staffName, email, phone || 'N/A', 'Driver', 'Driver', `License: ${licenseCategory || 'B'}, Expiry: ${licenseExpiry || 'N/A'}`, companyId]);
+
+    let userAccount = null;
+
+    // Auto-create user account if email provided
+    if (email && companyId && companyId !== 'super_admin') {
+      try {
+        const existingUser = await UserModel.findByEmail(email, companyId);
+
+        if (!existingUser) {
+          const { user, tempPassword } = await UserModel.create({
+            email,
+            firstName,
+            lastName,
+            phone: phone || undefined,
+            role: 'staff',
+            companyId
+          });
+
+          userAccount = {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            tempPassword
+          };
+        } else {
+          userAccount = {
+            userId: existingUser.id,
+            email: existingUser.email,
+            role: existingUser.role,
+            tempPassword: null,
+            note: 'User account already existed'
+          };
+        }
+      } catch (userError: any) {
+        console.error('Auto-create user error:', userError);
+        userAccount = { error: 'Failed to create user account: ' + userError.message };
+      }
+    }
+
+    const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
+
+    res.status(201).json({
+      success: true,
+      driver: result[0],
+      userAccount
+    });
+  } catch (error: any) {
+    console.error('Create driver error:', error);
+    res.status(500).json({ error: 'Failed to create driver', details: error.message });
+  }
+});
+
 // Create staff with auto user account creation
 router.post('/', async (req: any, res) => {
   const { 
