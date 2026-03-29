@@ -88,12 +88,12 @@ router.post('/', async (req, res) => {
     await query(`
       INSERT INTO fuel_records 
       (id, fuel_date, vehicle_id, card_num, card_name, past_mileage, 
-       current_mileage, distance_km, quantity_liters, km_per_liter, amount, cost_per_km, place)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       current_mileage, quantity_liters, km_per_liter, amount, cost_per_km, place)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     `, [
       id, fuel_date, vehicle_id, card_num || '', card_name || '', 
       parseInt(past_mileage), parseInt(current_mileage), 
-      distance, parseFloat(quantity_liters), km_per_liter, 
+      parseFloat(quantity_liters), km_per_liter, 
       parseFloat(amount), cost_per_km, place || ''
     ]);
 
@@ -220,13 +220,13 @@ router.get('/cards', async (req: any, res) => {
 // Create fuel card
 router.post('/cards', async (req, res) => {
   const { card_num, card_name, assigned_vehicle_id, monthly_limit } = req.body;
-  
+
   if (!card_num) {
     return res.status(400).json({ error: 'Card number is required' });
   }
-  
+
   try {
-    // Ensure table exists
+    // Ensure table exists with correct columns
     await query(`
       CREATE TABLE IF NOT EXISTS fuel_cards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -240,13 +240,25 @@ router.post('/cards', async (req, res) => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    
+
+    // Add missing columns if they don't exist
+    try {
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_num VARCHAR(100)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_name VARCHAR(255)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS assigned_vehicle_id UUID REFERENCES vehicles(id)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS monthly_limit DECIMAL(10,2)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS current_month_usage DECIMAL(10,2) DEFAULT 0`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`);
+    } catch (e) {
+      // Ignore errors
+    }
+
     const id = uuidv4();
     await query(`
       INSERT INTO fuel_cards (id, card_num, card_name, assigned_vehicle_id, monthly_limit)
       VALUES ($1, $2, $3, $4, $5)
     `, [id, card_num, card_name || '', assigned_vehicle_id || null, monthly_limit || null]);
-    
+
     const result = await query('SELECT * FROM fuel_cards WHERE id = $1', [id]);
     res.status(201).json(result[0]);
   } catch (error: any) {
