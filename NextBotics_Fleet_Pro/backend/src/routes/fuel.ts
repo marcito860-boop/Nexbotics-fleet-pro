@@ -275,6 +275,10 @@ router.post('/cards', async (req: any, res) => {
     return res.status(400).json({ error: 'Card number is required' });
   }
 
+  if (!companyId) {
+    return res.status(400).json({ error: 'Company ID is required. Please ensure you are logged in.' });
+  }
+
   try {
     // Ensure table exists with correct columns
     await query(`
