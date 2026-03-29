@@ -161,9 +161,19 @@ export default function FuelPage() {
     if (!res.ok) throw new Error('Failed to fetch vehicles');
     const data = await res.json();
     // Handle both wrapped { success, data: { items } } and raw array responses
-    const vehicles = data.success 
+    let vehicles = data.success 
       ? (data.data?.items || data.data || [])
       : (Array.isArray(data) ? data : []);
+    
+    // Transform backend format (registrationNumber, make, model) to frontend format (registration_num, make_model)
+    vehicles = vehicles.map((v: any) => ({
+      id: v.id,
+      registration_num: v.registrationNumber || v.registration_num,
+      make_model: v.make && v.model ? `${v.make} ${v.model}` : (v.make_model || ''),
+      current_mileage: v.currentMileage || v.current_mileage || 0,
+      target_consumption_rate: v.target_consumption_rate
+    }));
+    
     setVehicles(vehicles);
   };
 
