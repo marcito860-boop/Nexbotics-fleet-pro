@@ -71,86 +71,92 @@ router.get('/drivers', async (req: any, res) => {
   }
 });
 
-// Create driver (maps frontend driver fields to staff fields)
-router.post('/drivers', async (req: any, res) => {
-  const {
-    firstName, lastName, email, phone,
-    licenseNumber, licenseCategory, licenseExpiry
-  } = req.body;
+// Create staff with auto user account creation
+// Handles both driver format (firstName, lastName, licenseNumber) and staff format (staff_name, staff_no)
+router.post('/', async (req: any, res) => {
+  // Check if this is a driver creation request (from DriversPage)
+  const isDriverFormat = req.body.firstName !== undefined || req.body.licenseNumber !== undefined;
+  
+  if (isDriverFormat) {
+    // Handle driver creation from DriversPage
+    const {
+      firstName, lastName, email, phone,
+      licenseNumber, licenseCategory, licenseExpiry
+    } = req.body;
 
-  const companyId = req.user?.companyId;
+    const companyId = req.user?.companyId;
 
-  if (!firstName || !lastName) {
-    return res.status(400).json({ error: 'First name and last name are required' });
-  }
-
-  try {
-    const id = uuidv4();
-    const staffName = `${firstName} ${lastName}`;
-    const staffNo = licenseNumber || `DRV-${Date.now()}`;
-
-    await query(`
-      INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, role, comments, company_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-    `, [id, staffNo, staffName, email, phone || 'N/A', 'Driver', 'Driver', `License: ${licenseCategory || 'B'}, Expiry: ${licenseExpiry || 'N/A'}`, companyId]);
-
-    let userAccount = null;
-
-    // Auto-create user account if email provided
-    if (email && companyId && companyId !== 'super_admin') {
-      try {
-        const existingUser = await UserModel.findByEmail(email, companyId);
-
-        if (!existingUser) {
-          const { user, tempPassword } = await UserModel.create({
-            email,
-            firstName,
-            lastName,
-            phone: phone || undefined,
-            role: 'staff',
-            companyId
-          });
-
-          userAccount = {
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-            tempPassword
-          };
-        } else {
-          userAccount = {
-            userId: existingUser.id,
-            email: existingUser.email,
-            role: existingUser.role,
-            tempPassword: null,
-            note: 'User account already existed'
-          };
-        }
-      } catch (userError: any) {
-        console.error('Auto-create user error:', userError);
-        userAccount = { error: 'Failed to create user account: ' + userError.message };
-      }
+    if (!firstName || !lastName) {
+      return res.status(400).json({ error: 'First name and last name are required' });
     }
 
-    const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
+    try {
+      const id = uuidv4();
+      const staffName = `${firstName} ${lastName}`;
+      const staffNo = licenseNumber || `DRV-${Date.now()}`;
 
-    res.status(201).json({
-      success: true,
-      driver: result[0],
-      userAccount
-    });
-  } catch (error: any) {
-    console.error('Create driver error:', error);
-    res.status(500).json({ error: 'Failed to create driver', details: error.message });
+      await query(`
+        INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, role, comments, company_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [id, staffNo, staffName, email, phone || 'N/A', 'Driver', 'Driver', `License: ${licenseCategory || 'B'}, Expiry: ${licenseExpiry || 'N/A'}`, companyId]);
+
+      let userAccount = null;
+
+      // Auto-create user account if email provided
+      if (email && companyId && companyId !== 'super_admin') {
+        try {
+          const existingUser = await UserModel.findByEmail(email, companyId);
+
+          if (!existingUser) {
+            const { user, tempPassword } = await UserModel.create({
+              email,
+              firstName,
+              lastName,
+              phone: phone || undefined,
+              role: 'staff',
+              companyId
+            });
+
+            userAccount = {
+              userId: user.id,
+              email: user.email,
+              role: user.role,
+              tempPassword
+            };
+          } else {
+            userAccount = {
+              userId: existingUser.id,
+              email: existingUser.email,
+              role: existingUser.role,
+              tempPassword: null,
+              note: 'User account already existed'
+            };
+          }
+        } catch (userError: any) {
+          console.error('Auto-create user error:', userError);
+          userAccount = { error: 'Failed to create user account: ' + userError.message };
+        }
+      }
+
+      const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
+
+      return res.status(201).json({
+        success: true,
+        staff: result[0],
+        driver: result[0],
+        userAccount
+      });
+    } catch (error: any) {
+      console.error('Create driver error:', error);
+      return res.status(500).json({ error: 'Failed to create driver', details: error.message });
+    }
   }
-});
-
-// Create staff with auto user account creation
-router.post('/', async (req: any, res) => {
+  
+  // Handle staff creation (original format)
   const { 
     staff_no, staff_name, email, phone, 
     designation, department, branch, role, comments,
-    create_user_account = true // Default to creating user account
+    create_user_account = true
   } = req.body;
   
   const companyId = req.user?.companyId;
@@ -158,7 +164,6 @@ router.post('/', async (req: any, res) => {
   try {
     const id = uuidv4();
     
-    // Create staff record
     await query(`
       INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, department, branch, role, comments, company_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -166,10 +171,8 @@ router.post('/', async (req: any, res) => {
     
     let userAccount = null;
     
-    // Auto-create user account if email provided and flag is set
     if (create_user_account && email && companyId && companyId !== 'super_admin') {
       try {
-        // Check if user already exists
         const existingUser = await UserModel.findByEmail(email, companyId);
         
         if (!existingUser) {
