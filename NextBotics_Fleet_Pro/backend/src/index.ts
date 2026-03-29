@@ -26,7 +26,7 @@ import analyticsRoutes from './routes/analytics';
 import requisitionRoutes from './routes/requisitions';
 import accidentRoutes from './routes/accidents';
 import auditRoutes from './routes/audits';
-import trainingRoutes from './routes/training';
+import trainingRoutes from './routes/training_enhanced';
 import auditScheduleRoutes from './routes/audit-schedules';
 import integrationRoutes from './routes/integrations';
 import integrationProvidersRoutes from './routes/integration-providers';
