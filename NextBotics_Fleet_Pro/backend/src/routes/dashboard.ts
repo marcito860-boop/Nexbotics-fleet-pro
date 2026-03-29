@@ -116,7 +116,8 @@ router.get('/stats', async (req, res) => {
 });
 
 // GET /api/fleet/alerts - Get dashboard alerts
-router.get('/alerts', async (req, res) => {
+// Note: This router is mounted at /api/fleet/alerts, so this handles the root path
+router.get('/', async (req, res) => {
   try {
     const { status, limit = 5 } = req.query;
     const companyId = (req as any).user?.companyId;
