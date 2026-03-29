@@ -323,16 +323,20 @@ const createTables = async () => {
       returned_at TIMESTAMP,
       security_notes TEXT,
       notes TEXT,
+      completed_at TIMESTAMP,
+      completion_notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
   
-  // Add notes column if it doesn't exist (migration for existing tables)
+  // Add missing columns for existing tables (migrations)
   try {
     await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS notes TEXT`);
+    await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
+    await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS completion_notes TEXT`);
   } catch (e) {
-    // Column might already exist
+    // Columns might already exist
   }
 
   // Analytics cache table
