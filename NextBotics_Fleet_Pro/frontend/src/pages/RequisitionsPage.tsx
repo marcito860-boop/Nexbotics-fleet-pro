@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Plus, Clock, CheckCircle, XCircle, AlertCircle, X, Car, User } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
-import { Requisition, Vehicle } from '../types/fleet';
+import { Requisition, Vehicle, Driver } from '../types/fleet';
 import DashboardLayout from '../components/Layout';
 
 interface RequisitionFormData {
@@ -14,13 +14,6 @@ interface RequisitionFormData {
   numberOfPassengers: number;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   notes: string;
-}
-
-interface Driver {
-  id: string;
-  staff_name: string;
-  email?: string;
-  phone?: string;
 }
 
 export default function RequisitionsPage() {
@@ -556,7 +549,7 @@ export default function RequisitionsPage() {
                   <option value="">Choose a vehicle...</option>
                   {vehicles.filter(v => v.status === 'available').map(v => (
                     <option key={v.id} value={v.id}>
-                      {v.registrationNumber || v.registration_num} - {v.makeModel || v.make_model}
+                      {v.registrationNumber} - {v.make} {v.model}
                     </option>
                   ))}
                 </select>
@@ -574,9 +567,9 @@ export default function RequisitionsPage() {
                   required
                 >
                   <option value="">Choose a driver...</option>
-                  {drivers.filter(d => d.role === 'Driver' || d.role === 'driver').map(d => (
+                  {drivers.map(d => (
                     <option key={d.id} value={d.id}>
-                      {d.staff_name} {d.phone ? `- ${d.phone}` : ''}
+                      {d.firstName} {d.lastName} {d.phone ? `- ${d.phone}` : ''}
                     </option>
                   ))}
                 </select>

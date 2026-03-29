@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Search, Phone, Award, X, Edit2, Trash2, Upload } from 'lucide-react';
+import { Users, Plus, Search, Phone, Award, X, Edit2, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Driver, LicenseCategory } from '../types/fleet';

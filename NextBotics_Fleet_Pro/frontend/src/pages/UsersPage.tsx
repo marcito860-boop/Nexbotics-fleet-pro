@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Users, Plus, RefreshCw, Trash2, Key, UserPlus, Edit2, X } from 'lucide-react';
+import { Users, RefreshCw, Trash2, Key, UserPlus, Edit2, X } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { User } from '../types';
@@ -15,7 +14,6 @@ interface UserFormData {
 }
 
 export default function UsersPage() {
-  const navigate = useNavigate();
   const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);

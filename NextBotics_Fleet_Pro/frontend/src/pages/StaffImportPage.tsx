@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Users, Download, AlertCircle, CheckCircle, X, FileSpreadsheet, UserPlus } from 'lucide-react';
-import { useAuthStore } from '../store/authStore';
+import { Upload, Download, AlertCircle, CheckCircle, FileSpreadsheet, UserPlus } from 'lucide-react';
 import DashboardLayout from '../components/Layout';
 
 interface ImportResult {
@@ -27,7 +26,6 @@ interface ImportResult {
 
 export default function StaffImportPage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [loading, setLoading] = useState(false);
@@ -35,9 +33,6 @@ export default function StaffImportPage() {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<any[]>([]);
   const [createUserAccounts, setCreateUserAccounts] = useState(true);
-
-  const isAdmin = user?.role === 'admin';
-  const isManager = user?.role === 'manager';
 
   // CSV Template
   const csvTemplate = `staff_no,staff_name,email,phone,designation,department,branch,role,comments
