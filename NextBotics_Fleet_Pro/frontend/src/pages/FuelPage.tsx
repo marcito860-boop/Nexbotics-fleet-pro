@@ -160,7 +160,11 @@ export default function FuelPage() {
     });
     if (!res.ok) throw new Error('Failed to fetch vehicles');
     const data = await res.json();
-    setVehicles(Array.isArray(data) ? data : []);
+    // Handle both wrapped { success, data: { items } } and raw array responses
+    const vehicles = data.success 
+      ? (data.data?.items || data.data || [])
+      : (Array.isArray(data) ? data : []);
+    setVehicles(vehicles);
   };
 
   const fetchEfficiencyData = async () => {
