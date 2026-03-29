@@ -322,10 +322,18 @@ const createTables = async () => {
       trip_duration_minutes INTEGER,
       returned_at TIMESTAMP,
       security_notes TEXT,
+      notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  
+  // Add notes column if it doesn't exist (migration for existing tables)
+  try {
+    await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS notes TEXT`);
+  } catch (e) {
+    // Column might already exist
+  }
 
   // Analytics cache table
   await pool.query(`
