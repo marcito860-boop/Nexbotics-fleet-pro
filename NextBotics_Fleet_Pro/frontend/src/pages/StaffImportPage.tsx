@@ -125,6 +125,9 @@ EMP005,James Mutua,james.m@company.com,+254756789012,Supervisor,Field,Nairobi,Su
         comments: row.comments || row.notes || row.remarks || ''
       }));
 
+      console.log('Sending staff_list:', mappedList);
+      console.log('Token exists:', !!localStorage.getItem('token'));
+
       const token = localStorage.getItem('token');
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       
@@ -143,7 +146,8 @@ EMP005,James Mutua,james.m@company.com,+254756789012,Supervisor,Field,Nairobi,Su
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || data.details || 'Import failed');
+        console.error('Import error:', data);
+        throw new Error(data.error || data.details || JSON.stringify(data) || 'Import failed');
       }
 
       setResult(data);
