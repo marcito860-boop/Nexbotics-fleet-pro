@@ -46,6 +46,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Fleet Overview', href: '/fleet', icon: Car, roles: ['admin', 'manager'] },
     { name: 'Vehicles', href: '/vehicles', icon: Car },
     { name: 'Drivers', href: '/drivers', icon: Users },
+    { name: 'Users', href: '/users', icon: Users, roles: ['admin', 'manager'] },
     { name: 'Assignments', href: '/assignments', icon: ClipboardList },
     { name: 'Trips', href: '/trips', icon: Route },
     { name: 'Route Planning', href: '/routes', icon: Map },

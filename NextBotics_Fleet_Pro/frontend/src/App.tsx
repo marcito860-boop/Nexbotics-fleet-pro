@@ -25,6 +25,7 @@ import RisksPage from './pages/RisksPage';
 import SettingsPage from './pages/SettingsPage';
 import CompaniesPage from './pages/CompaniesPage';
 import CompanyUsersPage from './pages/CompanyUsersPage';
+import UsersPage from './pages/UsersPage';
 import DocumentsPage from './pages/DocumentsPage';
 import ReportsPage from './pages/ReportsPage';
 import RoutePlanningPage from './pages/RoutePlanningPage';
@@ -280,6 +281,15 @@ function App() {
         element={
           <ProtectedRoute>
             <CompanyUsersPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute requireManager>
+            <UsersPage />
           </ProtectedRoute>
         }
       />
