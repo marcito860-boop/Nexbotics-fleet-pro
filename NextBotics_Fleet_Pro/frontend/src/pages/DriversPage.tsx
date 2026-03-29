@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Plus, Search, Phone, Award, X, Edit2, Trash2 } from 'lucide-react';
+import { Users, Plus, Search, Phone, Award, X, Edit2, Trash2, Upload } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { Driver, LicenseCategory } from '../types/fleet';
@@ -226,17 +226,26 @@ export default function DriversPage() {
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Drivers</h1>
-          <button
-            onClick={() => {
-              setFormData(initialFormData);
-              setError('');
-              setShowCreateModal(true);
-            }}
-            className="mt-4 sm:mt-0 inline-flex items-center px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 transition-colors"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Add Driver
-          </button>
+          <div className="mt-4 sm:mt-0 flex gap-2">
+            <button
+              onClick={() => navigate('/staff/import')}
+              className="inline-flex items-center px-4 py-2 border border-amber-500 text-amber-600 rounded-lg font-medium hover:bg-amber-50 transition-colors"
+            >
+              <Users className="h-5 w-5 mr-2" />
+              Bulk Import
+            </button>
+            <button
+              onClick={() => {
+                setFormData(initialFormData);
+                setError('');
+                setShowCreateModal(true);
+              }}
+              className="inline-flex items-center px-4 py-2 bg-amber-500 text-slate-900 rounded-lg font-medium hover:bg-amber-600 transition-colors"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Add Driver
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
