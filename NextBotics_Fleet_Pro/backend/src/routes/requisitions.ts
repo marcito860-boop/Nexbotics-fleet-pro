@@ -466,13 +466,31 @@ router.post('/:id/allocate', async (req: any, res) => {
 // Start trip (mark as in_progress)
 router.post('/:id/start', async (req: any, res) => {
   const { id } = req.params;
+  const { startingOdometer, startOdometer } = req.body;
+  
+  const startOdo = startingOdometer || startOdometer;
+  
+  console.log('Start trip request:', { id, startOdo, body: req.body });
   
   try {
+    // Get vehicle's current mileage if no starting odometer provided
+    let initialOdo = startOdo;
+    if (!initialOdo) {
+      const tripData = await query('SELECT vehicle_id FROM requisitions WHERE id = $1', [id]);
+      if (tripData.length > 0 && tripData[0].vehicle_id) {
+        const vehicleData = await query('SELECT current_mileage FROM vehicles WHERE id = $1', [tripData[0].vehicle_id]);
+        if (vehicleData.length > 0) {
+          initialOdo = vehicleData[0].current_mileage;
+          console.log('Using vehicle current mileage as starting odometer:', initialOdo);
+        }
+      }
+    }
+    
     await query(`
       UPDATE requisitions 
-      SET status = 'in_progress', departed_at = CURRENT_TIMESTAMP
-      WHERE id = $1 AND status = 'allocated'
-    `, [id]);
+      SET status = 'in_progress', departed_at = CURRENT_TIMESTAMP, starting_odometer = $1
+      WHERE id = $2 AND status = 'allocated'
+    `, [initialOdo || null, id]);
 
     const result = await query(`
       SELECT r.*, v.registration_num 
@@ -495,10 +513,19 @@ router.post('/:id/complete', async (req: any, res) => {
   
   const finalOdometer = endingOdometer || endOdometer;
   
+  console.log('Complete trip request:', { id, finalOdometer, notes, body: req.body });
+  
   try {
     const tripData = await query('SELECT * FROM requisitions WHERE id = $1', [id]);
     if (tripData.length === 0) {
       return res.status(404).json(errorResponse('Requisition not found'));
+    }
+
+    console.log('Trip data:', tripData[0]);
+    
+    // Require ending odometer for completion
+    if (!finalOdometer) {
+      return res.status(400).json(errorResponse('Ending odometer reading is required'));
     }
 
     const distance = finalOdometer ? finalOdometer - (tripData[0].starting_odometer || 0) : 0;

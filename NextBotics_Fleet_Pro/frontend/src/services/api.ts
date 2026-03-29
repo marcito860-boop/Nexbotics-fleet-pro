@@ -338,13 +338,13 @@ class ApiService {
     return response.data;
   }
 
-  async startRequisition(id: string): Promise<ApiResponse<Requisition>> {
-    const response = await this.client.post(`/fleet/requisitions/${id}/start`);
+  async startRequisition(id: string, startingOdometer?: number): Promise<ApiResponse<Requisition>> {
+    const response = await this.client.post(`/fleet/requisitions/${id}/start`, { startingOdometer });
     return response.data;
   }
 
-  async completeRequisition(id: string): Promise<ApiResponse<Requisition>> {
-    const response = await this.client.post(`/fleet/requisitions/${id}/complete`);
+  async completeRequisition(id: string, endingOdometer?: number, notes?: string): Promise<ApiResponse<Requisition>> {
+    const response = await this.client.post(`/fleet/requisitions/${id}/complete`, { endingOdometer, notes });
     return response.data;
   }
 

@@ -224,28 +224,40 @@ export default function RequisitionsPage() {
   };
 
   const handleStart = async (id: string) => {
+    const startingOdometer = prompt('Enter starting odometer reading:');
+    if (!startingOdometer) return;
+    
     try {
-      const response = await api.startRequisition(id);
+      console.log('Starting trip:', { id, startingOdometer });
+      const response = await api.startRequisition(id, parseInt(startingOdometer));
       if (response.success) {
         loadRequisitions();
       } else {
         alert(response.error || 'Failed to start trip');
       }
     } catch (error: any) {
-      alert(error.message || 'Error starting trip');
+      console.error('Start trip error:', error);
+      alert(error.response?.data?.error || error.message || 'Error starting trip');
     }
   };
 
   const handleComplete = async (id: string) => {
+    const endingOdometer = prompt('Enter ending odometer reading:');
+    if (!endingOdometer) return;
+    
+    const notes = prompt('Enter completion notes (optional):') || '';
+    
     try {
-      const response = await api.completeRequisition(id);
+      console.log('Completing trip:', { id, endingOdometer, notes });
+      const response = await api.completeRequisition(id, parseInt(endingOdometer), notes);
       if (response.success) {
         loadRequisitions();
       } else {
         alert(response.error || 'Failed to complete trip');
       }
     } catch (error: any) {
-      alert(error.message || 'Error completing trip');
+      console.error('Complete trip error:', error);
+      alert(error.response?.data?.error || error.message || 'Error completing trip');
     }
   };
 
