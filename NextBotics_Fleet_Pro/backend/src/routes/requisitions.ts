@@ -1018,7 +1018,7 @@ router.post('/:id/inspection', async (req: any, res) => {
       battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok,
       defects_found || '', JSON.stringify(defect_photos || []),
       passed, starting_odometer || null,
-      passed ? 'ready_for_departure' : 'inspection_failed',
+      passed ? 'inspection_done' : 'inspection_failed',
       id
     ]);
 
@@ -1050,6 +1050,225 @@ router.post('/:id/inspection', async (req: any, res) => {
   } catch (error: any) {
     console.error('Inspection error:', error);
     res.status(500).json(errorResponse('Failed to submit inspection: ' + error.message));
+  }
+});
+
+// ========== SECURITY ENDPOINTS - Gate Control ==========
+
+// POST /api/fleet/requisitions/:id/depart - Security confirms vehicle departure
+router.post('/:id/depart', async (req: any, res) => {
+  const { id } = req.params;
+  const { gate_notes } = req.body;
+  const companyId = req.user?.companyId;
+  const securityId = req.user?.staffId || req.user?.userId;
+
+  try {
+    // Verify requisition belongs to company and is ready for departure
+    let reqSql = `
+      SELECT r.*, v.registration_num, d.staff_name as driver_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1 AND r.status IN ('ready_for_departure', 'inspection_done')
+    `;
+    const reqParams: any[] = [id];
+    
+    if (companyId && companyId !== 'super_admin') {
+      reqSql += ' AND s.company_id = $2';
+      reqParams.push(companyId);
+    }
+    
+    const reqResult = await query(reqSql, reqParams);
+    if (reqResult.length === 0) {
+      return res.status(404).json(errorResponse('Requisition not found or not ready for departure'));
+    }
+    
+    const requisition = reqResult[0];
+    
+    // Update requisition status to departed
+    await query(`
+      UPDATE requisitions 
+      SET status = 'in_transit',
+          departed_at = CURRENT_TIMESTAMP,
+          departed_by = $1,
+          departure_gate_notes = $2
+      WHERE id = $3
+    `, [securityId, gate_notes || '', id]);
+    
+    // Update vehicle status to On Trip
+    if (requisition.vehicle_id) {
+      await query(`
+        UPDATE vehicles 
+        SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `, [requisition.vehicle_id]);
+    }
+
+    res.json(successResponse({
+      id,
+      status: 'in_transit',
+      departed_at: new Date().toISOString(),
+      vehicle: requisition.registration_num,
+      driver: requisition.driver_name
+    }, 'Vehicle departure confirmed'));
+  } catch (error: any) {
+    console.error('Departure confirmation error:', error);
+    res.status(500).json(errorResponse('Failed to confirm departure: ' + error.message));
+  }
+});
+
+// POST /api/fleet/requisitions/:id/return - Security confirms vehicle return
+router.post('/:id/return', async (req: any, res) => {
+  const { id } = req.params;
+  const { ending_odometer, return_notes, gate_notes } = req.body;
+  const companyId = req.user?.companyId;
+  const securityId = req.user?.staffId || req.user?.userId;
+
+  try {
+    // Verify requisition belongs to company and is in transit
+    let reqSql = `
+      SELECT r.*, v.registration_num, d.staff_name as driver_name, r.vehicle_id
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1 AND r.status = 'in_transit'
+    `;
+    const reqParams: any[] = [id];
+    
+    if (companyId && companyId !== 'super_admin') {
+      reqSql += ' AND s.company_id = $2';
+      reqParams.push(companyId);
+    }
+    
+    const reqResult = await query(reqSql, reqParams);
+    if (reqResult.length === 0) {
+      return res.status(404).json(errorResponse('Requisition not found or vehicle not in transit'));
+    }
+    
+    const requisition = reqResult[0];
+    
+    // Validate ending odometer is greater than starting
+    if (ending_odometer && requisition.starting_odometer && 
+        parseInt(ending_odometer) <= parseInt(requisition.starting_odometer)) {
+      return res.status(400).json(errorResponse(
+        'Ending odometer must be greater than starting odometer',
+        { starting: requisition.starting_odometer, ending: ending_odometer }
+      ));
+    }
+    
+    // Calculate distance traveled
+    const distanceTraveled = ending_odometer && requisition.starting_odometer 
+      ? parseInt(ending_odometer) - parseInt(requisition.starting_odometer)
+      : null;
+    
+    // Update requisition status to completed
+    await query(`
+      UPDATE requisitions 
+      SET status = 'completed',
+          returned_at = CURRENT_TIMESTAMP,
+          returned_by = $1,
+          ending_odometer = $2,
+          distance_traveled = $3,
+          return_notes = $4,
+          return_gate_notes = $5,
+          completed_at = CURRENT_TIMESTAMP
+      WHERE id = $6
+    `, [securityId, ending_odometer || null, distanceTraveled, return_notes || '', gate_notes || '', id]);
+    
+    // Update vehicle status back to Available and update mileage
+    if (requisition.vehicle_id) {
+      await query(`
+        UPDATE vehicles 
+        SET status = 'Available', 
+            current_mileage = COALESCE($1, current_mileage),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [ending_odometer, requisition.vehicle_id]);
+    }
+
+    res.json(successResponse({
+      id,
+      status: 'completed',
+      returned_at: new Date().toISOString(),
+      vehicle: requisition.registration_num,
+      driver: requisition.driver_name,
+      starting_odometer: requisition.starting_odometer,
+      ending_odometer: ending_odometer,
+      distance_traveled: distanceTraveled
+    }, 'Vehicle return confirmed - Trip completed'));
+  } catch (error: any) {
+    console.error('Return confirmation error:', error);
+    res.status(500).json(errorResponse('Failed to confirm return: ' + error.message));
+  }
+});
+
+// GET /api/fleet/requisitions/gate/pending - Get requisitions pending security action
+router.get('/gate/pending', async (req: any, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    const { type } = req.query; // 'departure' or 'return'
+    
+    let statusFilter = '';
+    if (type === 'departure') {
+      statusFilter = `r.status IN ('ready_for_departure', 'inspection_done')`;
+    } else if (type === 'return') {
+      statusFilter = `r.status = 'in_transit'`;
+    } else {
+      statusFilter = `r.status IN ('ready_for_departure', 'inspection_done', 'in_transit')`;
+    }
+    
+    let sql = `
+      SELECT r.*, 
+        s.staff_name as requester_name, s.department,
+        v.registration_num, v.make_model, v.current_mileage,
+        d.staff_name as driver_name,
+        r.inspection_completed_at, r.starting_odometer,
+        r.departed_at, r.departed_by
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      WHERE ${statusFilter}
+    `;
+    const params: any[] = [];
+    
+    if (companyId && companyId !== 'super_admin') {
+      sql += ' AND s.company_id = $1';
+      params.push(companyId);
+    }
+    
+    sql += ' ORDER BY r.inspection_completed_at ASC NULLS LAST, r.departed_at ASC NULLS LAST';
+    
+    const result = await query(sql, params);
+    
+    // Format for security UI
+    const formatted = result.map((r: any) => ({
+      id: r.id,
+      request_no: r.request_no,
+      status: r.status,
+      action_needed: r.status === 'in_transit' ? 'Confirm Return' : 'Confirm Departure',
+      vehicle: {
+        registration: r.registration_num,
+        make_model: r.make_model
+      },
+      driver: r.driver_name,
+      requester: r.requester_name,
+      department: r.department,
+      destination: r.destination,
+      purpose: r.purpose,
+      passenger_count: r.num_passengers,
+      inspection_completed: !!r.inspection_completed_at,
+      departed: !!r.departed_at,
+      starting_odometer: r.starting_odometer,
+      current_mileage: r.current_mileage
+    }));
+    
+    res.json(successResponse(formatted));
+  } catch (error: any) {
+    console.error('Get gate pending error:', error);
+    res.status(500).json(errorResponse('Failed to fetch pending requisitions'));
   }
 });
 
