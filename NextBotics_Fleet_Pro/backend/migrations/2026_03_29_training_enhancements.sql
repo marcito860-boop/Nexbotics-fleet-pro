@@ -54,18 +54,23 @@ CREATE INDEX IF NOT EXISTS idx_certificates_user ON certificates(user_id);
 CREATE INDEX IF NOT EXISTS idx_certificates_company ON certificates(company_id);
 
 -- Insert sample courses with notes if table is empty
+-- Run this after you have created at least one company
 DO $$
+DECLARE
+    first_company_id UUID;
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM courses LIMIT 1) THEN
+    SELECT id INTO first_company_id FROM companies LIMIT 1;
+    
+    IF first_company_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM courses LIMIT 1) THEN
         INSERT INTO courses (company_id, title, description, category, passing_score, is_active, target_roles)
         VALUES 
-            ((SELECT id FROM companies LIMIT 1), 'Defensive Driving Fundamentals', 'Learn essential defensive driving techniques', 'defensive-driving', 70, true, ARRAY['driver', 'staff']),
-            ((SELECT id FROM companies LIMIT 1), 'Vehicle Inspection & Maintenance', 'Comprehensive vehicle inspection procedures', 'vehicle-inspection', 70, true, ARRAY['driver', 'staff']),
-            ((SELECT id FROM companies LIMIT 1), 'Fuel Efficiency & Eco-Driving', 'Techniques to reduce fuel consumption', 'fuel-efficiency', 70, true, ARRAY['driver']),
-            ((SELECT id FROM companies LIMIT 1), 'Accident Prevention & Response', 'Prevent accidents and respond appropriately', 'safety', 80, true, ARRAY['driver', 'staff']),
-            ((SELECT id FROM companies LIMIT 1), 'Regulatory Compliance & HOS', 'DOT regulations and hours of service', 'compliance', 80, true, ARRAY['driver']),
-            ((SELECT id FROM companies LIMIT 1), 'Cargo Securement', 'Proper cargo loading and securement', 'cargo-securement', 75, true, ARRAY['driver']),
-            ((SELECT id FROM companies LIMIT 1), 'Hazardous Materials Transportation', 'Hazmat transportation regulations', 'hazmat', 85, true, ARRAY['driver']),
-            ((SELECT id FROM companies LIMIT 1), 'Security & Anti-Terrorism', 'Protect vehicles, cargo, and personnel', 'security', 70, true, ARRAY['driver', 'staff']);
+            (first_company_id, 'Defensive Driving Fundamentals', 'Learn essential defensive driving techniques', 'defensive-driving', 70, true, ARRAY['driver', 'staff']),
+            (first_company_id, 'Vehicle Inspection & Maintenance', 'Comprehensive vehicle inspection procedures', 'vehicle-inspection', 70, true, ARRAY['driver', 'staff']),
+            (first_company_id, 'Fuel Efficiency & Eco-Driving', 'Techniques to reduce fuel consumption', 'fuel-efficiency', 70, true, ARRAY['driver']),
+            (first_company_id, 'Accident Prevention & Response', 'Prevent accidents and respond appropriately', 'safety', 80, true, ARRAY['driver', 'staff']),
+            (first_company_id, 'Regulatory Compliance & HOS', 'DOT regulations and hours of service', 'compliance', 80, true, ARRAY['driver']),
+            (first_company_id, 'Cargo Securement', 'Proper cargo loading and securement', 'cargo-securement', 75, true, ARRAY['driver']),
+            (first_company_id, 'Hazardous Materials Transportation', 'Hazmat transportation regulations', 'hazmat', 85, true, ARRAY['driver']),
+            (first_company_id, 'Security & Anti-Terrorism', 'Protect vehicles, cargo, and personnel', 'security', 70, true, ARRAY['driver', 'staff']);
     END IF;
 END $$;

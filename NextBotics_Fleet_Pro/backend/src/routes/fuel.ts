@@ -236,10 +236,11 @@ router.get('/cards', async (req: any, res) => {
       return res.json([]);
     }
     
-    // Add missing columns if they don't exist
+    // Add missing columns if they don't exist (handle both naming conventions)
     try {
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_num VARCHAR(100)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_number VARCHAR(100)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_name VARCHAR(255)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS assigned_vehicle_id UUID REFERENCES vehicles(id)`);
       await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS monthly_limit DECIMAL(10,2)`);
@@ -280,22 +281,38 @@ router.post('/cards', async (req: any, res) => {
   }
 
   try {
-    // Ensure table exists with correct columns
+    // Ensure table exists with correct columns (support both card_num and card_number)
     await query(`
       CREATE TABLE IF NOT EXISTS fuel_cards (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
-        card_num VARCHAR(100) NOT NULL,
+        card_num VARCHAR(100),
+        card_number VARCHAR(100),
         card_name VARCHAR(255),
         assigned_vehicle_id UUID REFERENCES vehicles(id),
         monthly_limit DECIMAL(10,2),
         current_month_usage DECIMAL(10,2) DEFAULT 0,
         status VARCHAR(20) DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(company_id, card_num)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Rename card_number to card_num if that's what exists
+    try {
+      await query(`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns 
+                     WHERE table_name = 'fuel_cards' AND column_name = 'card_number')
+          THEN
+            ALTER TABLE fuel_cards RENAME COLUMN card_number TO card_num;
+          END IF;
+        END $$;
+      `);
+    } catch (e) {
+      // Ignore
+    }
 
     // Add missing columns if they don't exist
     try {
