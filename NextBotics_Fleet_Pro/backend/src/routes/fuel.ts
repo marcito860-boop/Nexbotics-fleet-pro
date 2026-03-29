@@ -43,8 +43,20 @@ router.get('/', async (req: any, res) => {
     
     const result = await query(queryStr, params);
     
+    // Ensure numeric fields are properly converted (not NULL)
+    const sanitizedResult = result.map((r: any) => ({
+      ...r,
+      past_mileage: r.past_mileage || 0,
+      current_mileage: r.current_mileage || 0,
+      distance_km: r.distance_km || 0,
+      quantity_liters: r.quantity_liters || 0,
+      km_per_liter: parseFloat(r.km_per_liter) || 0,
+      amount: parseFloat(r.amount) || 0,
+      cost_per_km: parseFloat(r.cost_per_km) || 0
+    }));
+    
     // Return raw array for frontend compatibility
-    res.json(result);
+    res.json(sanitizedResult);
   } catch (error) {
     console.error('Get fuel records error:', error);
     res.status(500).json({ error: 'Failed to fetch fuel records' });
@@ -350,11 +362,11 @@ router.get('/analytics', async (req: any, res) => {
     // Overall summary
     const summaryResult = await query(`
       SELECT 
-        SUM(f.quantity_liters) as total_liters,
-        SUM(f.amount) as total_cost,
-        SUM(f.distance_km) as total_distance,
-        AVG(f.km_per_liter) as avg_efficiency,
-        AVG(f.cost_per_km) as avg_cost_per_km,
+        COALESCE(SUM(f.quantity_liters), 0) as total_liters,
+        COALESCE(SUM(f.amount), 0) as total_cost,
+        COALESCE(SUM(f.distance_km), 0) as total_distance,
+        COALESCE(AVG(f.km_per_liter), 0) as avg_efficiency,
+        COALESCE(AVG(f.cost_per_km), 0) as avg_cost_per_km,
         COUNT(*) as record_count
       FROM fuel_records f
       WHERE ${baseWhere}
