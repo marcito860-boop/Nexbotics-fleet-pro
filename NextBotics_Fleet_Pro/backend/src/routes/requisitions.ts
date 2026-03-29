@@ -901,6 +901,76 @@ router.get('/stats', async (req: any, res) => {
 
 // ========== INSPECTION ENDPOINTS - with company verification ==========
 
+// GET /api/fleet/requisitions/:id/inspection - Get inspection details
+router.get('/:id/inspection', async (req: any, res) =>> {
+  const { id } = req.params;
+  const companyId = req.user?.companyId;
+
+  try {
+    let sql = `
+      SELECT r.id, r.request_no, r.status,
+        r.inspection_tires, r.inspection_brakes, r.inspection_lights,
+        r.inspection_oil, r.inspection_coolant, r.inspection_battery,
+        r.inspection_wipers, r.inspection_mirrors, r.inspection_seatbelts,
+        r.inspection_fuel, r.defects_found, r.defect_photos,
+        r.inspection_passed, r.inspection_completed_at, r.starting_odometer,
+        v.registration_num, v.make_model,
+        d.staff_name as driver_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `;
+    const params: any[] = [id];
+    
+    if (companyId && companyId !== 'super_admin') {
+      sql += ' AND s.company_id = $2';
+      params.push(companyId);
+    }
+    
+    const result = await query(sql, params);
+    
+    if (result.length === 0) {
+      return res.status(404).json(errorResponse('Requisition not found'));
+    }
+    
+    const data = result[0];
+    const inspection = {
+      id: data.id,
+      request_no: data.request_no,
+      status: data.status,
+      vehicle: {
+        registration_num: data.registration_num,
+        make_model: data.make_model
+      },
+      driver: data.driver_name,
+      completed_at: data.inspection_completed_at,
+      passed: data.inspection_passed,
+      starting_odometer: data.starting_odometer,
+      checks: {
+        tires: data.inspection_tires,
+        brakes: data.inspection_brakes,
+        lights: data.inspection_lights,
+        oil: data.inspection_oil,
+        coolant: data.inspection_coolant,
+        battery: data.inspection_battery,
+        wipers: data.inspection_wipers,
+        mirrors: data.inspection_mirrors,
+        seatbelts: data.inspection_seatbelts,
+        fuel: data.inspection_fuel
+      },
+      defects_found: data.defects_found,
+      defect_photos: data.defect_photos
+    };
+    
+    res.json(successResponse(inspection));
+  } catch (error: any) {
+    console.error('Get inspection error:', error);
+    res.status(500).json(errorResponse('Failed to get inspection: ' + error.message));
+  }
+});
+
 // Submit driver inspection - with company verification
 router.post('/:id/inspection', async (req: any, res) => {
   const { id } = req.params;
