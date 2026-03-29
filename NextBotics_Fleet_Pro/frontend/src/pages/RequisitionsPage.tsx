@@ -10,6 +10,7 @@ interface RequisitionFormData {
   purpose: string;
   requiredFrom: string;
   requiredUntil: string;
+  fromLocation: string;
   destination: string;
   numberOfPassengers: number;
   priority: 'low' | 'normal' | 'high' | 'urgent';
@@ -36,6 +37,7 @@ export default function RequisitionsPage() {
     purpose: '',
     requiredFrom: '',
     requiredUntil: '',
+    fromLocation: '',
     destination: '',
     numberOfPassengers: 1,
     priority: 'normal',
@@ -93,7 +95,7 @@ export default function RequisitionsPage() {
 
   const handleCreateRequisition = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.purpose || !formData.requiredFrom || !formData.requiredUntil) {
+    if (!formData.purpose || !formData.requiredFrom || !formData.requiredUntil || !formData.fromLocation || !formData.destination) {
       alert('Please fill in all required fields');
       return;
     }
@@ -107,6 +109,7 @@ export default function RequisitionsPage() {
           purpose: '',
           requiredFrom: '',
           requiredUntil: '',
+          fromLocation: '',
           destination: '',
           numberOfPassengers: 1,
           priority: 'normal',
@@ -452,15 +455,29 @@ export default function RequisitionsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Destination</label>
-                <input
-                  type="text"
-                  value={formData.destination}
-                  onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                  placeholder="e.g., Nairobi CBD"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">From Location *</label>
+                  <input
+                    type="text"
+                    value={formData.fromLocation}
+                    onChange={(e) => setFormData({ ...formData, fromLocation: e.target.value })}
+                    placeholder="e.g., Office"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Destination *</label>
+                  <input
+                    type="text"
+                    value={formData.destination}
+                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                    placeholder="e.g., Nairobi CBD"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
