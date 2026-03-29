@@ -46,6 +46,55 @@ router.get('/courses', async (req: any, res) => {
   }
 });
 
+// POST /api/fleet/training/courses/seed - Seed default courses (admin only)
+router.post('/courses/seed', async (req: any, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    const userRole = req.user?.role;
+
+    if (!['admin', 'manager', 'super_admin'].includes(userRole)) {
+      return res.status(403).json(errorResponse('Only admins can seed courses'));
+    }
+
+    if (!companyId) {
+      return res.status(400).json(errorResponse('Company ID is required'));
+    }
+
+    // Check if courses already exist for this company
+    const existing = await query('SELECT COUNT(*) as count FROM courses WHERE company_id = $1', [companyId]);
+    if (parseInt(existing[0].count) > 0) {
+      return res.status(400).json(errorResponse('Courses already exist for this company'));
+    }
+
+    // Insert default courses
+    const defaultCourses = [
+      { title: 'Defensive Driving Fundamentals', description: 'Learn essential defensive driving techniques', category: 'defensive-driving', passing_score: 70, target_roles: ['driver', 'staff'] },
+      { title: 'Vehicle Inspection & Maintenance', description: 'Comprehensive vehicle inspection procedures', category: 'vehicle-inspection', passing_score: 70, target_roles: ['driver', 'staff'] },
+      { title: 'Fuel Efficiency & Eco-Driving', description: 'Techniques to reduce fuel consumption', category: 'fuel-efficiency', passing_score: 70, target_roles: ['driver'] },
+      { title: 'Accident Prevention & Response', description: 'Prevent accidents and respond appropriately', category: 'safety', passing_score: 80, target_roles: ['driver', 'staff'] },
+      { title: 'Regulatory Compliance & HOS', description: 'DOT regulations and hours of service', category: 'compliance', passing_score: 80, target_roles: ['driver'] },
+      { title: 'Cargo Securement', description: 'Proper cargo loading and securement', category: 'cargo-securement', passing_score: 75, target_roles: ['driver'] },
+      { title: 'Hazardous Materials Transportation', description: 'Hazmat transportation regulations', category: 'hazmat', passing_score: 85, target_roles: ['driver'] },
+      { title: 'Security & Anti-Terrorism', description: 'Protect vehicles, cargo, and personnel', category: 'security', passing_score: 70, target_roles: ['driver', 'staff'] }
+    ];
+
+    const inserted = [];
+    for (const course of defaultCourses) {
+      const result = await query(
+        `INSERT INTO courses (id, company_id, title, description, category, passing_score, is_active, target_roles)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [uuidv4(), companyId, course.title, course.description, course.category, course.passing_score, true, course.target_roles]
+      );
+      inserted.push(result[0]);
+    }
+
+    res.json(successResponse(inserted, `Created ${inserted.length} default courses`));
+  } catch (error: any) {
+    console.error('Error seeding courses:', error);
+    res.status(500).json(errorResponse('Failed to seed courses: ' + error.message));
+  }
+});
+
 // GET /api/fleet/training/courses/:id - Get single course with notes
 router.get('/courses/:id', async (req: any, res) => {
   try {
