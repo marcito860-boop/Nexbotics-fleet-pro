@@ -102,7 +102,9 @@ export default function RequisitionsPage() {
 
     setSaving(true);
     try {
+      console.log('Submitting requisition:', formData);
       const response = await api.createRequisition(formData);
+      console.log('Response:', response);
       if (response.success) {
         setShowModal(false);
         setFormData({
@@ -120,7 +122,9 @@ export default function RequisitionsPage() {
         alert(response.error || 'Failed to create requisition');
       }
     } catch (error: any) {
-      alert(error.message || 'Error creating requisition');
+      console.error('Requisition error:', error);
+      console.error('Error response:', error.response?.data);
+      alert(error.response?.data?.details?.error || error.response?.data?.error || error.message || 'Error creating requisition');
     } finally {
       setSaving(false);
     }
