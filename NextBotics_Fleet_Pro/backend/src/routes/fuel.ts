@@ -10,6 +10,7 @@ const router = Router();
 router.get('/', async (req: any, res) => {
   try {
     const { vehicle_id, start_date, end_date, limit = 100 } = req.query;
+    const companyId = req.user?.companyId;
     
     let queryStr = `
       SELECT f.*, v.registration_num, v.make_model, v.fuel_type
@@ -19,6 +20,13 @@ router.get('/', async (req: any, res) => {
     `;
     let params: any[] = [];
     let paramIndex = 1;
+    
+    // Add company filtering
+    if (companyId && companyId !== 'super_admin') {
+      queryStr += ` AND v.company_id = $${paramIndex}`;
+      params.push(companyId);
+      paramIndex++;
+    }
     
     if (vehicle_id) {
       queryStr += ` AND f.vehicle_id = $${paramIndex}`;
@@ -57,20 +65,22 @@ router.get('/', async (req: any, res) => {
     
     // Return raw array for frontend compatibility
     res.json(sanitizedResult);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get fuel records error:', error);
     res.status(500).json({ error: 'Failed to fetch fuel records' });
   }
 });
 
 // Create fuel record - RETURNS OBJECT
-router.post('/', async (req, res) => {
+router.post('/', async (req: any, res) => {
   const {
     fuel_date, vehicle_id, card_num, card_name,
     past_mileage, current_mileage, quantity_liters, amount, place
   } = req.body;
 
   console.log('Fuel transaction request:', req.body);
+  
+  const companyId = req.user?.companyId;
 
   // Validation
   if (!fuel_date || !vehicle_id || !past_mileage || !current_mileage || !quantity_liters || !amount) {
@@ -90,6 +100,14 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    // Verify vehicle belongs to user's company
+    if (companyId && companyId !== 'super_admin') {
+      const vehicleCheck = await query('SELECT company_id FROM vehicles WHERE id = $1', [vehicle_id]);
+      if (vehicleCheck.length === 0 || vehicleCheck[0].company_id !== companyId) {
+        return res.status(403).json({ error: 'Vehicle does not belong to your company' });
+      }
+    }
+
     // Calculate metrics
     const distance = parseInt(current_mileage) - parseInt(past_mileage);
     const km_per_liter = distance > 0 && quantity_liters > 0 ? (distance / parseFloat(quantity_liters)).toFixed(2) : 0;
@@ -346,6 +364,7 @@ router.put('/cards/:id', async (req, res) => {
 router.get('/analytics', async (req: any, res) => {
   try {
     const { start_date, end_date, vehicle_id } = req.query;
+    const companyId = req.user?.companyId;
     
     // Default to last 30 days if no dates provided
     const end = end_date || new Date().toISOString().split('T')[0];
@@ -353,10 +372,19 @@ router.get('/analytics', async (req: any, res) => {
     
     let baseWhere = `f.fuel_date >= $1 AND f.fuel_date <= $2`;
     let params: any[] = [start, end];
+    let paramIndex = 3;
+    
+    // Add company filtering via vehicles join
+    if (companyId && companyId !== 'super_admin') {
+      baseWhere += ` AND v.company_id = $${paramIndex}`;
+      params.push(companyId);
+      paramIndex++;
+    }
     
     if (vehicle_id) {
-      baseWhere += ` AND f.vehicle_id = $3`;
+      baseWhere += ` AND f.vehicle_id = $${paramIndex}`;
       params.push(vehicle_id);
+      paramIndex++;
     }
     
     // Overall summary
@@ -369,6 +397,7 @@ router.get('/analytics', async (req: any, res) => {
         COALESCE(AVG(f.cost_per_km), 0) as avg_cost_per_km,
         COUNT(*) as record_count
       FROM fuel_records f
+      JOIN vehicles v ON v.id = f.vehicle_id
       WHERE ${baseWhere}
     `, params);
     
@@ -381,16 +410,14 @@ router.get('/analytics', async (req: any, res) => {
         SUM(f.distance_km) as distance,
         AVG(f.km_per_liter) as avg_efficiency
       FROM fuel_records f
+      JOIN vehicles v ON v.id = f.vehicle_id
       WHERE ${baseWhere}
       GROUP BY DATE_TRUNC('month', f.fuel_date)
       ORDER BY month DESC
       LIMIT 12
     `, params);
     
-    // Vehicle efficiency ranking
-    let vehicleParams = [start, end];
-    let vehicleWhere = `f.fuel_date >= $1 AND f.fuel_date <= $2`;
-    
+    // Vehicle efficiency ranking - use same params as base query
     const vehicleResult = await query(`
       SELECT 
         v.registration_num,
@@ -402,11 +429,11 @@ router.get('/analytics', async (req: any, res) => {
         COUNT(*) as fill_count
       FROM fuel_records f
       JOIN vehicles v ON v.id = f.vehicle_id
-      WHERE ${vehicleWhere}
+      WHERE ${baseWhere}
       GROUP BY v.id, v.registration_num, v.make_model
       HAVING COUNT(*) >= 2
       ORDER BY avg_efficiency DESC
-    `, vehicleParams);
+    `, params);
     
     // Alerts - low efficiency vehicles
     const alertsResult = await query(`
@@ -417,11 +444,11 @@ router.get('/analytics', async (req: any, res) => {
         COUNT(*) as record_count
       FROM fuel_records f
       JOIN vehicles v ON v.id = f.vehicle_id
-      WHERE ${vehicleWhere}
+      WHERE ${baseWhere}
       GROUP BY v.id, v.registration_num
       HAVING COUNT(*) >= 3 AND AVG(f.km_per_liter) < 5
       ORDER BY avg_efficiency ASC
-    `, vehicleParams);
+    `, params);
     
     res.json({
       summary: summaryResult[0] || {
@@ -448,7 +475,9 @@ router.get('/analytics', async (req: any, res) => {
 // Get fuel efficiency - RETURNS RAW ARRAY
 router.get('/efficiency', async (req: any, res) => {
   try {
-    const result = await query(`
+    const companyId = req.user?.companyId;
+    
+    let sql = `
       SELECT 
         v.registration_num,
         v.target_consumption_rate as target_rate,
@@ -462,10 +491,22 @@ router.get('/efficiency', async (req: any, res) => {
         END as variance
       FROM fuel_records f
       JOIN vehicles v ON v.id = f.vehicle_id
+    `;
+    
+    let params: any[] = [];
+    
+    if (companyId && companyId !== 'super_admin') {
+      sql += ' WHERE v.company_id = $1';
+      params.push(companyId);
+    }
+    
+    sql += `
       GROUP BY v.id, v.registration_num, v.target_consumption_rate
       HAVING COUNT(*) >= 2
       ORDER BY avg_km_per_liter DESC
-    `);
+    `;
+    
+    const result = await query(sql, params);
     
     // Return raw array for frontend compatibility
     res.json(result.map((r: any) => ({
@@ -476,7 +517,7 @@ router.get('/efficiency', async (req: any, res) => {
       total_fuel: parseFloat(r.total_fuel) || 0,
       variance: parseFloat(r.variance) || 0
     })));
-  } catch (error) {
+  } catch (error: any) {
     console.error('Efficiency error:', error);
     res.status(500).json({ error: 'Failed to fetch efficiency data' });
   }
