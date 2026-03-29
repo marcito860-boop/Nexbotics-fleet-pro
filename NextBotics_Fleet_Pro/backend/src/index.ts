@@ -15,6 +15,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth';
 import vehicleRoutes from './routes/vehicles';
 import staffRoutes from './routes/staff';
+import userRoutes from './routes/users';
 import routeRoutes from './routes/routes';
 import fuelRoutes from './routes/fuel';
 import repairRoutes from './routes/repairs';
@@ -178,6 +179,7 @@ app.use('/api/auth', authRateLimiter, authRoutes);
 // Protected routes - Legacy paths (keep for backward compatibility)
 app.use('/api/vehicles', authenticateToken, vehicleRoutes);
 app.use('/api/staff', authenticateToken, staffRoutes);
+app.use('/api/users', authenticateToken, userRoutes);
 app.use('/api/routes', authenticateToken, routeRoutes);
 app.use('/api/fuel', authenticateToken, fuelRoutes);
 app.use('/api/repairs', authenticateToken, repairRoutes);
