@@ -62,7 +62,6 @@ router.post('/', async (req: any, res) => {
     
     // If still no requester, create a default staff record for this user
     if (!requesterId && req.user) {
-      const newStaffId = uuidv4();
       const staffName = req.user.firstName && req.user.lastName 
         ? `${req.user.firstName} ${req.user.lastName}`
         : req.user.email.split('@')[0];
@@ -75,16 +74,26 @@ router.post('/', async (req: any, res) => {
       });
       
       try {
-        await query(`
-          INSERT INTO staff (id, staff_name, email, role, department, company_id)
-          VALUES ($1, $2, $3, 'Staff', 'General', $4)
-          ON CONFLICT (email) DO UPDATE SET staff_name = EXCLUDED.staff_name
-          RETURNING id, email
-        `, [newStaffId, staffName, req.user.email, req.user.companyId]);
+        // Try to find existing staff first
+        const existingStaff = await query('SELECT id FROM staff WHERE email = $1', [req.user.email]);
         
-        requesterId = newStaffId;
-        staffEmail = req.user.email;
-        console.log('Staff auto-created successfully:', { staffId: newStaffId });
+        if (existingStaff && existingStaff.length > 0) {
+          // Use existing staff
+          requesterId = existingStaff[0].id;
+          staffEmail = req.user.email;
+          console.log('Using existing staff record:', { staffId: requesterId });
+        } else {
+          // Create new staff
+          const newStaffId = uuidv4();
+          await query(`
+            INSERT INTO staff (id, staff_name, email, role, department, company_id)
+            VALUES ($1, $2, $3, 'Staff', 'General', $4)
+          `, [newStaffId, staffName, req.user.email, req.user.companyId]);
+          
+          requesterId = newStaffId;
+          staffEmail = req.user.email;
+          console.log('Staff auto-created successfully:', { staffId: newStaffId });
+        }
       } catch (insertErr: any) {
         console.error('Failed to auto-create staff:', insertErr);
         staffCreationError = insertErr.message;
