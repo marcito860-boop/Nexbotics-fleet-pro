@@ -51,7 +51,50 @@ router.get('/', async (req: any, res) => {
   }
 });
 
-// Get drivers only
+// Helper to convert staff record to driver format
+function staffToDriver(staff: any): any {
+  // Parse staff_name into firstName and lastName
+  const nameParts = (staff.staff_name || '').split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+  
+  // Parse license info from comments
+  // Format: "License: B, Expiry: 2026-12-31"
+  let licenseCategory = 'B';
+  let licenseExpiry = '';
+  let licenseNumber = staff.staff_no || '';
+  
+  if (staff.comments) {
+    const licenseMatch = staff.comments.match(/License:\s*([A-E])/);
+    const expiryMatch = staff.comments.match(/Expiry:\s*(\d{4}-\d{2}-\d{2})/);
+    if (licenseMatch) licenseCategory = licenseMatch[1];
+    if (expiryMatch) licenseExpiry = expiryMatch[1];
+  }
+  
+  return {
+    id: staff.id,
+    companyId: staff.company_id,
+    employeeNumber: staff.staff_no,
+    firstName,
+    lastName,
+    email: staff.email,
+    phone: staff.phone || 'N/A',
+    licenseNumber,
+    licenseCategory,
+    licenseExpiry,
+    employmentStatus: 'active',
+    safetyScore: staff.safety_score || 100,
+    totalTrips: 0,
+    totalDistanceKm: 0,
+    isActive: !staff.deleted_at,
+    createdAt: staff.created_at,
+    updatedAt: staff.updated_at,
+    // Keep original staff data too
+    _staff: staff
+  };
+}
+
+// Get drivers only - returns in Driver format
 router.get('/drivers', async (req: any, res) => {
   try {
     const companyId = req.user?.companyId;
@@ -65,9 +108,14 @@ router.get('/drivers', async (req: any, res) => {
     
     sql += ' ORDER BY staff_name';
     const result = await query(sql, params);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch drivers' });
+    
+    // Transform to Driver format
+    const drivers = result.map(staffToDriver);
+    
+    res.json({ success: true, data: { items: drivers } });
+  } catch (error: any) {
+    console.error('Get drivers error:', error);
+    res.status(500).json({ error: 'Failed to fetch drivers', details: error.message });
   }
 });
 
@@ -139,11 +187,11 @@ router.post('/', async (req: any, res) => {
       }
 
       const result = await query('SELECT * FROM staff WHERE id = $1', [id]);
+      const driver = staffToDriver(result[0]);
 
       return res.status(201).json({
         success: true,
-        staff: result[0],
-        driver: result[0],
+        data: driver,
         userAccount
       });
     } catch (error: any) {
