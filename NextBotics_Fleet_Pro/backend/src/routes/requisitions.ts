@@ -67,15 +67,28 @@ router.post('/', async (req: any, res) => {
         ? `${req.user.firstName} ${req.user.lastName}`
         : req.user.email.split('@')[0];
       
-      await query(`
-        INSERT INTO staff (id, staff_name, email, role, department, company_id)
-        VALUES ($1, $2, $3, 'Staff', 'General', $4)
-        ON CONFLICT (email) DO UPDATE SET staff_name = EXCLUDED.staff_name
-        RETURNING id, email
-      `, [newStaffId, staffName, req.user.email, req.user.companyId]);
+      console.log('Auto-creating staff for user:', { 
+        userId: req.user.userId, 
+        email: req.user.email, 
+        companyId: req.user.companyId,
+        staffName 
+      });
       
-      requesterId = newStaffId;
-      staffEmail = req.user.email;
+      try {
+        await query(`
+          INSERT INTO staff (id, staff_name, email, role, department, company_id)
+          VALUES ($1, $2, $3, 'Staff', 'General', $4)
+          ON CONFLICT (email) DO UPDATE SET staff_name = EXCLUDED.staff_name
+          RETURNING id, email
+        `, [newStaffId, staffName, req.user.email, req.user.companyId]);
+        
+        requesterId = newStaffId;
+        staffEmail = req.user.email;
+        console.log('Staff auto-created successfully:', { staffId: newStaffId });
+      } catch (insertErr: any) {
+        console.error('Failed to auto-create staff:', insertErr);
+        staffCreationError = insertErr.message;
+      }
     }
   } catch (err: any) {
     console.error('Error finding/creating staff:', err);
