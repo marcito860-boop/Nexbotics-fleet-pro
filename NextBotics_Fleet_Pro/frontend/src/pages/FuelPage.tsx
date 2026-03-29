@@ -133,7 +133,7 @@ export default function FuelPage() {
   };
 
   const fetchRecords = async () => {
-    const res = await fetch(`${API_BASE_URL}/fuel`, {
+    const res = await fetch(`${API_BASE_URL}/api/fuel`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch fuel records');
@@ -142,7 +142,7 @@ export default function FuelPage() {
   };
 
   const fetchFuelCards = async () => {
-    const res = await fetch(`${API_BASE_URL}/fuel/cards`, {
+    const res = await fetch(`${API_BASE_URL}/api/fuel/cards`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -155,7 +155,7 @@ export default function FuelPage() {
   };
 
   const fetchVehicles = async () => {
-    const res = await fetch(`${API_BASE_URL}/vehicles`, {
+    const res = await fetch(`${API_BASE_URL}/api/vehicles`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) throw new Error('Failed to fetch vehicles');
@@ -164,7 +164,7 @@ export default function FuelPage() {
   };
 
   const fetchEfficiencyData = async () => {
-    const res = await fetch(`${API_BASE_URL}/fuel/efficiency`, {
+    const res = await fetch(`${API_BASE_URL}/api/fuel/efficiency`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -176,7 +176,7 @@ export default function FuelPage() {
   };
 
   const fetchCostAnalytics = async () => {
-    const res = await fetch(`${API_BASE_URL}/fuel/analytics?start=${dateRange.start}&end=${dateRange.end}`, {
+    const res = await fetch(`${API_BASE_URL}/api/fuel/analytics?start=${dateRange.start}&end=${dateRange.end}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -199,7 +199,7 @@ export default function FuelPage() {
   const submitTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE_URL}/fuel`, {
+      const res = await fetch(`${API_BASE_URL}/api/fuel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +241,7 @@ export default function FuelPage() {
   const submitCard = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${API_BASE_URL}/fuel/cards`, {
+      const res = await fetch(`${API_BASE_URL}/api/fuel/cards`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -268,7 +268,7 @@ export default function FuelPage() {
   const toggleCardStatus = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
     try {
-      const res = await fetch(`${API_BASE_URL}/fuel/cards/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/fuel/cards/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
