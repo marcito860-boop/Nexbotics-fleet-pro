@@ -213,26 +213,33 @@ export default function FuelPage() {
   const submitTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        fuel_date: transactionForm.fuel_date,
+        vehicle_id: transactionForm.vehicle_id,
+        card_num: transactionForm.card_num,
+        card_name: transactionForm.card_name,
+        past_mileage: parseInt(transactionForm.past_mileage) || 0,
+        current_mileage: parseInt(transactionForm.current_mileage) || 0,
+        quantity_liters: parseFloat(transactionForm.quantity_liters) || 0,
+        amount: parseFloat(transactionForm.amount) || 0,
+        place: transactionForm.place
+      };
+      console.log('Submitting fuel transaction:', payload);
+      
       const res = await fetch(`${API_BASE_URL}/api/fuel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          fuel_date: transactionForm.fuel_date,
-          vehicle_id: transactionForm.vehicle_id,
-          card_num: transactionForm.card_num,
-          card_name: transactionForm.card_name,
-          past_mileage: parseInt(transactionForm.past_mileage) || 0,
-          current_mileage: parseInt(transactionForm.current_mileage) || 0,
-          quantity_liters: parseFloat(transactionForm.quantity_liters) || 0,
-          amount: parseFloat(transactionForm.amount) || 0,
-          place: transactionForm.place
-        })
+        body: JSON.stringify(payload)
       });
       
-      if (!res.ok) throw new Error('Failed to save transaction');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Fuel transaction error:', errorData);
+        throw new Error(errorData.error || errorData.details?.error || `Failed: ${res.status}`);
+      }
       
       setShowTransactionForm(false);
       setTransactionForm({

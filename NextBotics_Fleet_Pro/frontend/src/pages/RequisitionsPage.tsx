@@ -57,15 +57,28 @@ export default function RequisitionsPage() {
 
   const loadVehiclesAndDrivers = async () => {
     try {
+      console.log('Loading vehicles and drivers...');
       const [vehiclesRes, driversRes] = await Promise.all([
         api.getVehicles(),
         api.getDrivers()
       ]);
+      console.log('Vehicles response:', vehiclesRes);
+      console.log('Drivers response:', driversRes);
+      
       if (vehiclesRes.success) {
-        setVehicles(vehiclesRes.data?.items || []);
+        const vehicleItems = vehiclesRes.data?.items || [];
+        console.log(`Loaded ${vehicleItems.length} vehicles:`, vehicleItems);
+        setVehicles(vehicleItems);
+      } else {
+        console.error('Vehicles API error:', vehiclesRes.error);
       }
+      
       if (driversRes.success) {
-        setDrivers(driversRes.data?.items || []);
+        const driverItems = driversRes.data?.items || [];
+        console.log(`Loaded ${driverItems.length} drivers:`, driverItems);
+        setDrivers(driverItems);
+      } else {
+        console.error('Drivers API error:', driversRes.error);
       }
     } catch (error) {
       console.error('Failed to load vehicles/drivers:', error);

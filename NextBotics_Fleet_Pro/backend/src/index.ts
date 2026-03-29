@@ -195,7 +195,11 @@ app.use('/api/audit-schedules', authenticateToken, auditScheduleRoutes);
 
 // Protected routes - Fleet API paths (matches frontend expectations)
 app.use('/api/fleet/vehicles', authenticateToken, vehicleRoutes);
-app.use('/api/fleet/drivers', authenticateToken, staffRoutes); // Drivers are staff
+app.use('/api/fleet/drivers', authenticateToken, (req, res, next) => {
+  // Rewrite the URL to /drivers so staffRoutes can handle it
+  req.url = '/drivers' + req.url;
+  staffRoutes(req, res, next);
+});
 app.use('/api/fleet/routes', authenticateToken, routeRoutes);
 app.use('/api/fleet/fuel', authenticateToken, fuelRoutes);
 app.use('/api/fleet/assignments', authenticateToken, requisitionRoutes); // Map assignments to requisitions
