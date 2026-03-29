@@ -592,11 +592,11 @@ export default function FuelPage() {
                           <td className="p-3">{r.quantity_liters || 0}</td>
                           <td className="p-3">
                             <span className={`px-2 py-1 rounded text-xs ${
-                              (r.km_per_liter || 0) >= 8 ? 'bg-green-100 text-green-800' :
-                              (r.km_per_liter || 0) >= 5 ? 'bg-yellow-100 text-yellow-800' :
+                              (parseFloat(r.km_per_liter as any) || 0) >= 8 ? 'bg-green-100 text-green-800' :
+                              (parseFloat(r.km_per_liter as any) || 0) >= 5 ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                             }`}>
-                              {(r.km_per_liter || 0).toFixed(2)}
+                              {(parseFloat(r.km_per_liter as any) || 0).toFixed(2)}
                             </span>
                           </td>
                           <td className="p-3">${(parseFloat(r.amount as any) || 0).toFixed(2)}</td>
