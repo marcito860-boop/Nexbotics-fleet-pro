@@ -124,7 +124,28 @@ export default function RequisitionsPage() {
     } catch (error: any) {
       console.error('Requisition error:', error);
       console.error('Error response:', error.response?.data);
-      alert(error.response?.data?.details?.error || error.response?.data?.error || error.message || 'Error creating requisition');
+      const details = error.response?.data?.details;
+      let errorMsg = error.response?.data?.error || error.message || 'Error creating requisition';
+      
+      // Add details about what's missing
+      if (details) {
+        const missing = [];
+        if (!details.received?.hasRequesterId) missing.push('Requester (staff record)');
+        if (!details.received?.hasDeparture) missing.push('From Location');
+        if (!details.received?.hasDestination) missing.push('Destination');
+        if (!details.received?.hasPurpose) missing.push('Purpose');
+        if (!details.received?.hasTravelDate) missing.push('Travel Date');
+        
+        if (missing.length > 0) {
+          errorMsg += '\n\nMissing: ' + missing.join(', ');
+        }
+        
+        if (details.staffCreationError) {
+          errorMsg += '\n\nStaff creation error: ' + details.staffCreationError;
+        }
+      }
+      
+      alert(errorMsg);
     } finally {
       setSaving(false);
     }
