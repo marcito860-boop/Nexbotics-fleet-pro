@@ -61,7 +61,9 @@ export default function UsersPage() {
     setSaving(true);
 
     try {
+      console.log('Creating user with data:', formData);
       const res = await api.createUser(formData);
+      console.log('Create user response:', res);
       if (res.success) {
         setTempPassword(res.data?.tempPassword || '');
         setSuccess(`User ${formData.firstName} ${formData.lastName} created successfully!`);
@@ -76,7 +78,9 @@ export default function UsersPage() {
         setError(res.error || 'Failed to create user');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to create user');
+      console.error('Create user error:', err);
+      console.error('Error response:', err.response?.data);
+      setError(err.response?.data?.error || err.response?.data?.details || err.message || 'Failed to create user');
     } finally {
       setSaving(false);
     }

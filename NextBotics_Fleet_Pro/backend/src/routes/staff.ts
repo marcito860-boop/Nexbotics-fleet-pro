@@ -45,9 +45,18 @@ router.get('/', async (req: any, res) => {
     
     sql += ' ORDER BY created_at DESC';
     const result = await query(sql, params);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch staff' });
+    
+    // Return wrapped response for frontend consistency
+    res.json({
+      success: true,
+      data: {
+        items: result,
+        total: result.length
+      }
+    });
+  } catch (error: any) {
+    console.error('Get staff error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch staff' });
   }
 });
 
