@@ -202,6 +202,18 @@ router.get('/cards', async (req: any, res) => {
       return res.json([]);
     }
     
+    // Add missing columns if they don't exist
+    try {
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_num VARCHAR(100)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS card_name VARCHAR(255)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS assigned_vehicle_id UUID REFERENCES vehicles(id)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS monthly_limit DECIMAL(10,2)`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS current_month_usage DECIMAL(10,2) DEFAULT 0`);
+      await query(`ALTER TABLE fuel_cards ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`);
+    } catch (e) {
+      console.log('Columns might already exist');
+    }
+    
     const result = await query(`
       SELECT fc.*, v.registration_num
       FROM fuel_cards fc
@@ -211,9 +223,9 @@ router.get('/cards', async (req: any, res) => {
     
     // Return raw array for frontend compatibility
     res.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get fuel cards error:', error);
-    res.status(500).json({ error: 'Failed to fetch fuel cards' });
+    res.status(500).json({ error: 'Failed to fetch fuel cards', details: error.message });
   }
 });
 
