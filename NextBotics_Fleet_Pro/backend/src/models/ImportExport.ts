@@ -203,23 +203,33 @@ export class ImportExportModel {
   // CSV PARSING & VALIDATION
   // ============================================
 
-  static parseCSV(csvContent: string): { headers: string[]; rows: any[] } {
+  static parseCSV(csvContent: string): { headers: string[]; rows: any[]; normalizedHeaders: string[] } {
     const lines = csvContent.split('\n').filter(line => line.trim());
     if (lines.length < 2) throw new Error('CSV must have at least a header row and one data row');
 
-    const headers = this.parseCSVLine(lines[0]);
+    const rawHeaders = this.parseCSVLine(lines[0]);
+    // Normalize headers: lowercase, trim, replace spaces with underscores
+    const headers = rawHeaders.map(h => h.trim());
+    const normalizedHeaders = headers.map(h => this.normalizeColumnName(h));
     const rows: any[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       const values = this.parseCSVLine(lines[i]);
       const row: Record<string, any> = {};
       headers.forEach((header, index) => {
-        row[header.trim()] = values[index]?.trim() || '';
+        const value = values[index];
+        row[header] = value !== undefined ? value.trim() : '';
+        // Also add normalized version for easier access
+        row[this.normalizeColumnName(header)] = value !== undefined ? value.trim() : '';
       });
       rows.push(row);
     }
 
-    return { headers, rows };
+    return { headers, rows, normalizedHeaders };
+  }
+
+  private static normalizeColumnName(name: string): string {
+    return name.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   }
 
   private static parseCSVLine(line: string): string[] {
@@ -227,41 +237,74 @@ export class ImportExportModel {
     let current = '';
     let inQuotes = false;
 
-    for (const char of line) {
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
       if (char === '"') {
-        inQuotes = !inQuotes;
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"';
+          i++; // Skip next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
       } else if (char === ',' && !inQuotes) {
-        result.push(current);
+        result.push(current.trim());
         current = '';
       } else {
         current += char;
       }
     }
-    result.push(current);
+    result.push(current.trim());
     return result;
   }
 
+  // Helper to find a value by multiple possible column names
+  private static getValue(row: any, possibleNames: string[]): string | undefined {
+    for (const name of possibleNames) {
+      const normalized = this.normalizeColumnName(name);
+      if (row[normalized] !== undefined && row[normalized] !== '') {
+        return row[normalized];
+      }
+      // Also check original case
+      if (row[name] !== undefined && row[name] !== '') {
+        return row[name];
+      }
+    }
+    return undefined;
+  }
+
   // ============================================
-  // VALIDATION HELPERS
+  // VALIDATION HELPERS - with flexible column names
   // ============================================
 
   static validateVehicleRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.registration_number?.trim()) {
-      errors.push({ row: index + 2, field: 'registration_number', value: row.registration_number, message: 'Registration number is required' });
+    const regNum = this.getValue(row, ['registration_number', 'reg_number', 'registration', 'reg_no', 'plate', 'license_plate']);
+    if (!regNum?.trim()) {
+      errors.push({ row: index + 2, field: 'registration_number', value: regNum, message: 'Registration number is required' });
     }
-    if (!row.make?.trim()) {
-      errors.push({ row: index + 2, field: 'make', value: row.make, message: 'Make is required' });
+
+    const make = this.getValue(row, ['make', 'manufacturer', 'brand']);
+    if (!make?.trim()) {
+      errors.push({ row: index + 2, field: 'make', value: make, message: 'Make is required' });
     }
-    if (!row.model?.trim()) {
-      errors.push({ row: index + 2, field: 'model', value: row.model, message: 'Model is required' });
+
+    const model = this.getValue(row, ['model', 'model_name', 'vehicle_model']);
+    if (!model?.trim()) {
+      errors.push({ row: index + 2, field: 'model', value: model, message: 'Model is required' });
     }
-    if (row.year && (isNaN(parseInt(row.year)) || parseInt(row.year) < 1900 || parseInt(row.year) > new Date().getFullYear() + 1)) {
-      errors.push({ row: index + 2, field: 'year', value: row.year, message: 'Invalid year' });
+
+    const year = this.getValue(row, ['year', 'year_of_manufacture', 'manufacture_year', 'model_year']);
+    if (year && (isNaN(parseInt(year)) || parseInt(year) < 1900 || parseInt(year) > new Date().getFullYear() + 1)) {
+      errors.push({ row: index + 2, field: 'year', value: year, message: 'Invalid year' });
     }
-    if (row.fuel_capacity && isNaN(parseFloat(row.fuel_capacity))) {
-      errors.push({ row: index + 2, field: 'fuel_capacity', value: row.fuel_capacity, message: 'Fuel capacity must be a number' });
+
+    const fuelCapacity = this.getValue(row, ['fuel_capacity', 'fuel_tank_capacity', 'tank_capacity']);
+    if (fuelCapacity && isNaN(parseFloat(fuelCapacity))) {
+      errors.push({ row: index + 2, field: 'fuel_capacity', value: fuelCapacity, message: 'Fuel capacity must be a number' });
     }
 
     return errors;
@@ -270,17 +313,24 @@ export class ImportExportModel {
   static validateDriverRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.first_name?.trim()) {
-      errors.push({ row: index + 2, field: 'first_name', value: row.first_name, message: 'First name is required' });
+    const firstName = this.getValue(row, ['first_name', 'firstname', 'fname', 'given_name']);
+    if (!firstName?.trim()) {
+      errors.push({ row: index + 2, field: 'first_name', value: firstName, message: 'First name is required' });
     }
-    if (!row.last_name?.trim()) {
-      errors.push({ row: index + 2, field: 'last_name', value: row.last_name, message: 'Last name is required' });
+
+    const lastName = this.getValue(row, ['last_name', 'lastname', 'lname', 'surname', 'family_name']);
+    if (!lastName?.trim()) {
+      errors.push({ row: index + 2, field: 'last_name', value: lastName, message: 'Last name is required' });
     }
-    if (!row.license_number?.trim()) {
-      errors.push({ row: index + 2, field: 'license_number', value: row.license_number, message: 'License number is required' });
+
+    const licenseNumber = this.getValue(row, ['license_number', 'license_no', 'licence_number', 'driving_license', 'dl_number']);
+    if (!licenseNumber?.trim()) {
+      errors.push({ row: index + 2, field: 'license_number', value: licenseNumber, message: 'License number is required' });
     }
-    if (row.license_expiry && !this.isValidDate(row.license_expiry)) {
-      errors.push({ row: index + 2, field: 'license_expiry', value: row.license_expiry, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const licenseExpiry = this.getValue(row, ['license_expiry', 'license_expiry_date', 'licence_expiry']);
+    if (licenseExpiry && !this.isValidDate(licenseExpiry)) {
+      errors.push({ row: index + 2, field: 'license_expiry', value: licenseExpiry, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
 
     return errors;
@@ -289,17 +339,24 @@ export class ImportExportModel {
   static validateInventoryRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.sku?.trim()) {
-      errors.push({ row: index + 2, field: 'sku', value: row.sku, message: 'SKU is required' });
+    const sku = this.getValue(row, ['sku', 'item_code', 'product_code', 'code', 'part_number']);
+    if (!sku?.trim()) {
+      errors.push({ row: index + 2, field: 'sku', value: sku, message: 'SKU is required' });
     }
-    if (!row.name?.trim()) {
-      errors.push({ row: index + 2, field: 'name', value: row.name, message: 'Name is required' });
+
+    const name = this.getValue(row, ['name', 'item_name', 'product_name', 'description']);
+    if (!name?.trim()) {
+      errors.push({ row: index + 2, field: 'name', value: name, message: 'Name is required' });
     }
-    if (row.current_stock && isNaN(parseInt(row.current_stock))) {
-      errors.push({ row: index + 2, field: 'current_stock', value: row.current_stock, message: 'Current stock must be a number' });
+
+    const currentStock = this.getValue(row, ['current_stock', 'stock', 'quantity', 'qty', 'in_stock']);
+    if (currentStock && isNaN(parseInt(currentStock))) {
+      errors.push({ row: index + 2, field: 'current_stock', value: currentStock, message: 'Current stock must be a number' });
     }
-    if (row.unit_price && isNaN(parseFloat(row.unit_price))) {
-      errors.push({ row: index + 2, field: 'unit_price', value: row.unit_price, message: 'Unit price must be a number' });
+
+    const unitPrice = this.getValue(row, ['unit_price', 'price', 'cost', 'unit_cost']);
+    if (unitPrice && isNaN(parseFloat(unitPrice))) {
+      errors.push({ row: index + 2, field: 'unit_price', value: unitPrice, message: 'Unit price must be a number' });
     }
 
     return errors;
@@ -308,37 +365,54 @@ export class ImportExportModel {
   static validateMaintenanceRecordRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.vehicle_registration?.trim()) {
-      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    const vehicleReg = this.getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    if (!vehicleReg?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: vehicleReg, message: 'Vehicle registration is required' });
     }
-    if (!row.service_type?.trim()) {
-      errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type is required (preventive, repair, breakdown, emergency)' });
+
+    const serviceType = this.getValue(row, ['service_type', 'type', 'maintenance_type', 'service_category']);
+    if (!serviceType?.trim()) {
+      errors.push({ row: index + 2, field: 'service_type', value: serviceType, message: 'Service type is required (preventive, repair, breakdown, emergency)' });
     } else {
       const validTypes = ['preventive', 'repair', 'breakdown', 'emergency'];
-      if (!validTypes.includes(row.service_type.toLowerCase())) {
-        errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type must be: preventive, repair, breakdown, or emergency' });
+      if (!validTypes.includes(serviceType.toLowerCase())) {
+        errors.push({ row: index + 2, field: 'service_type', value: serviceType, message: 'Service type must be: preventive, repair, breakdown, or emergency' });
       }
     }
-    if (!row.category?.trim()) {
-      errors.push({ row: index + 2, field: 'category', value: row.category, message: 'Category is required' });
+
+    const category = this.getValue(row, ['category', 'maintenance_category']);
+    if (!category?.trim()) {
+      errors.push({ row: index + 2, field: 'category', value: category, message: 'Category is required' });
     }
-    if (!row.title?.trim()) {
-      errors.push({ row: index + 2, field: 'title', value: row.title, message: 'Title is required' });
+
+    const title = this.getValue(row, ['title', 'service_title', 'job_title', 'work_title']);
+    if (!title?.trim()) {
+      errors.push({ row: index + 2, field: 'title', value: title, message: 'Title is required' });
     }
-    if (row.scheduled_date && !this.isValidDate(row.scheduled_date)) {
-      errors.push({ row: index + 2, field: 'scheduled_date', value: row.scheduled_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const scheduledDate = this.getValue(row, ['scheduled_date', 'schedule_date', 'planned_date']);
+    if (scheduledDate && !this.isValidDate(scheduledDate)) {
+      errors.push({ row: index + 2, field: 'scheduled_date', value: scheduledDate, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
-    if (row.completed_date && !this.isValidDate(row.completed_date)) {
-      errors.push({ row: index + 2, field: 'completed_date', value: row.completed_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const completedDate = this.getValue(row, ['completed_date', 'completion_date', 'done_date']);
+    if (completedDate && !this.isValidDate(completedDate)) {
+      errors.push({ row: index + 2, field: 'completed_date', value: completedDate, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
-    if (row.service_mileage && isNaN(parseFloat(row.service_mileage))) {
-      errors.push({ row: index + 2, field: 'service_mileage', value: row.service_mileage, message: 'Service mileage must be a number' });
+
+    const serviceMileage = this.getValue(row, ['service_mileage', 'mileage', 'odometer', 'km']);
+    if (serviceMileage && isNaN(parseFloat(serviceMileage))) {
+      errors.push({ row: index + 2, field: 'service_mileage', value: serviceMileage, message: 'Service mileage must be a number' });
     }
-    if (row.labor_cost && isNaN(parseFloat(row.labor_cost))) {
-      errors.push({ row: index + 2, field: 'labor_cost', value: row.labor_cost, message: 'Labor cost must be a number' });
+
+    const laborCost = this.getValue(row, ['labor_cost', 'labour_cost', 'labor']);
+    if (laborCost && isNaN(parseFloat(laborCost))) {
+      errors.push({ row: index + 2, field: 'labor_cost', value: laborCost, message: 'Labor cost must be a number' });
     }
-    if (row.parts_cost && isNaN(parseFloat(row.parts_cost))) {
-      errors.push({ row: index + 2, field: 'parts_cost', value: row.parts_cost, message: 'Parts cost must be a number' });
+
+    const partsCost = this.getValue(row, ['parts_cost', 'parts', 'spare_parts_cost']);
+    if (partsCost && isNaN(parseFloat(partsCost))) {
+      errors.push({ row: index + 2, field: 'parts_cost', value: partsCost, message: 'Parts cost must be a number' });
     }
 
     return errors;
@@ -347,26 +421,35 @@ export class ImportExportModel {
   static validateFuelRecordRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.vehicle_registration?.trim()) {
-      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    const vehicleReg = this.getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    if (!vehicleReg?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: vehicleReg, message: 'Vehicle registration is required' });
     }
-    if (!row.date?.trim()) {
-      errors.push({ row: index + 2, field: 'date', value: row.date, message: 'Date is required' });
-    } else if (!this.isValidDate(row.date)) {
-      errors.push({ row: index + 2, field: 'date', value: row.date, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const date = this.getValue(row, ['date', 'fuel_date', 'transaction_date', 'fill_date']);
+    if (!date?.trim()) {
+      errors.push({ row: index + 2, field: 'date', value: date, message: 'Date is required' });
+    } else if (!this.isValidDate(date)) {
+      errors.push({ row: index + 2, field: 'date', value: date, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
-    if (!row.liters?.trim()) {
-      errors.push({ row: index + 2, field: 'liters', value: row.liters, message: 'Liters is required' });
-    } else if (isNaN(parseFloat(row.liters))) {
-      errors.push({ row: index + 2, field: 'liters', value: row.liters, message: 'Liters must be a number' });
+
+    const liters = this.getValue(row, ['liters', 'quantity', 'qty', 'volume', 'fuel_qty']);
+    if (!liters?.trim()) {
+      errors.push({ row: index + 2, field: 'liters', value: liters, message: 'Liters is required' });
+    } else if (isNaN(parseFloat(liters))) {
+      errors.push({ row: index + 2, field: 'liters', value: liters, message: 'Liters must be a number' });
     }
-    if (!row.cost?.trim()) {
-      errors.push({ row: index + 2, field: 'cost', value: row.cost, message: 'Cost is required' });
-    } else if (isNaN(parseFloat(row.cost))) {
-      errors.push({ row: index + 2, field: 'cost', value: row.cost, message: 'Cost must be a number' });
+
+    const cost = this.getValue(row, ['cost', 'amount', 'total', 'price', 'fuel_cost']);
+    if (!cost?.trim()) {
+      errors.push({ row: index + 2, field: 'cost', value: cost, message: 'Cost is required' });
+    } else if (isNaN(parseFloat(cost))) {
+      errors.push({ row: index + 2, field: 'cost', value: cost, message: 'Cost must be a number' });
     }
-    if (row.odometer && isNaN(parseFloat(row.odometer))) {
-      errors.push({ row: index + 2, field: 'odometer', value: row.odometer, message: 'Odometer must be a number' });
+
+    const odometer = this.getValue(row, ['odometer', 'mileage', 'km', 'odometer_reading']);
+    if (odometer && isNaN(parseFloat(odometer))) {
+      errors.push({ row: index + 2, field: 'odometer', value: odometer, message: 'Odometer must be a number' });
     }
 
     return errors;
@@ -375,22 +458,31 @@ export class ImportExportModel {
   static validateRouteRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.vehicle_registration?.trim()) {
-      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    const vehicleReg = this.getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    if (!vehicleReg?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: vehicleReg, message: 'Vehicle registration is required' });
     }
-    if (!row.route_date?.trim()) {
-      errors.push({ row: index + 2, field: 'route_date', value: row.route_date, message: 'Route date is required' });
-    } else if (!this.isValidDate(row.route_date)) {
-      errors.push({ row: index + 2, field: 'route_date', value: row.route_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const routeDate = this.getValue(row, ['route_date', 'date', 'trip_date', 'travel_date']);
+    if (!routeDate?.trim()) {
+      errors.push({ row: index + 2, field: 'route_date', value: routeDate, message: 'Route date is required' });
+    } else if (!this.isValidDate(routeDate)) {
+      errors.push({ row: index + 2, field: 'route_date', value: routeDate, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
-    if (!row.route_name?.trim()) {
-      errors.push({ row: index + 2, field: 'route_name', value: row.route_name, message: 'Route name is required' });
+
+    const routeName = this.getValue(row, ['route_name', 'route', 'trip', 'destination']);
+    if (!routeName?.trim()) {
+      errors.push({ row: index + 2, field: 'route_name', value: routeName, message: 'Route name is required' });
     }
-    if (row.actual_km && isNaN(parseFloat(row.actual_km))) {
-      errors.push({ row: index + 2, field: 'actual_km', value: row.actual_km, message: 'Actual KM must be a number' });
+
+    const actualKm = this.getValue(row, ['actual_km', 'km', 'distance', 'mileage']);
+    if (actualKm && isNaN(parseFloat(actualKm))) {
+      errors.push({ row: index + 2, field: 'actual_km', value: actualKm, message: 'Actual KM must be a number' });
     }
-    if (row.actual_fuel && isNaN(parseFloat(row.actual_fuel))) {
-      errors.push({ row: index + 2, field: 'actual_fuel', value: row.actual_fuel, message: 'Actual fuel must be a number' });
+
+    const actualFuel = this.getValue(row, ['actual_fuel', 'fuel_used', 'fuel_consumed', 'consumption']);
+    if (actualFuel && isNaN(parseFloat(actualFuel))) {
+      errors.push({ row: index + 2, field: 'actual_fuel', value: actualFuel, message: 'Actual fuel must be a number' });
     }
 
     return errors;
@@ -399,22 +491,31 @@ export class ImportExportModel {
   static validateAccidentRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.vehicle_registration?.trim()) {
-      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    const vehicleReg = this.getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    if (!vehicleReg?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: vehicleReg, message: 'Vehicle registration is required' });
     }
-    if (!row.accident_date?.trim()) {
-      errors.push({ row: index + 2, field: 'accident_date', value: row.accident_date, message: 'Accident date is required' });
-    } else if (!this.isValidDate(row.accident_date)) {
-      errors.push({ row: index + 2, field: 'accident_date', value: row.accident_date, message: 'Invalid date format (use YYYY-MM-DD)' });
+
+    const accidentDate = this.getValue(row, ['accident_date', 'date', 'incident_date', 'occurred_date']);
+    if (!accidentDate?.trim()) {
+      errors.push({ row: index + 2, field: 'accident_date', value: accidentDate, message: 'Accident date is required' });
+    } else if (!this.isValidDate(accidentDate)) {
+      errors.push({ row: index + 2, field: 'accident_date', value: accidentDate, message: 'Invalid date format (use YYYY-MM-DD)' });
     }
-    if (!row.location?.trim()) {
-      errors.push({ row: index + 2, field: 'location', value: row.location, message: 'Location is required' });
+
+    const location = this.getValue(row, ['location', 'place', 'gps_location', 'address']);
+    if (!location?.trim()) {
+      errors.push({ row: index + 2, field: 'location', value: location, message: 'Location is required' });
     }
-    if (!row.description?.trim()) {
-      errors.push({ row: index + 2, field: 'description', value: row.description, message: 'Description is required' });
+
+    const description = this.getValue(row, ['description', 'incident_description', 'details', 'narrative']);
+    if (!description?.trim()) {
+      errors.push({ row: index + 2, field: 'description', value: description, message: 'Description is required' });
     }
-    if (row.damage_cost && isNaN(parseFloat(row.damage_cost))) {
-      errors.push({ row: index + 2, field: 'damage_cost', value: row.damage_cost, message: 'Damage cost must be a number' });
+
+    const damageCost = this.getValue(row, ['damage_cost', 'cost', 'damage_amount']);
+    if (damageCost && isNaN(parseFloat(damageCost))) {
+      errors.push({ row: index + 2, field: 'damage_cost', value: damageCost, message: 'Damage cost must be a number' });
     }
 
     return errors;
@@ -423,14 +524,19 @@ export class ImportExportModel {
   static validateStaffRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.staff_no?.trim()) {
-      errors.push({ row: index + 2, field: 'staff_no', value: row.staff_no, message: 'Staff number is required' });
+    const staffNo = this.getValue(row, ['staff_no', 'staff_number', 'employee_id', 'emp_id', 'employee_no']);
+    if (!staffNo?.trim()) {
+      errors.push({ row: index + 2, field: 'staff_no', value: staffNo, message: 'Staff number is required' });
     }
-    if (!row.staff_name?.trim()) {
-      errors.push({ row: index + 2, field: 'staff_name', value: row.staff_name, message: 'Staff name is required' });
+
+    const staffName = this.getValue(row, ['staff_name', 'name', 'employee_name', 'full_name']);
+    if (!staffName?.trim()) {
+      errors.push({ row: index + 2, field: 'staff_name', value: staffName, message: 'Staff name is required' });
     }
-    if (row.email && !row.email.includes('@')) {
-      errors.push({ row: index + 2, field: 'email', value: row.email, message: 'Invalid email format' });
+
+    const email = this.getValue(row, ['email', 'email_address', 'e-mail']);
+    if (email && !email.includes('@')) {
+      errors.push({ row: index + 2, field: 'email', value: email, message: 'Invalid email format' });
     }
 
     return errors;
@@ -439,13 +545,16 @@ export class ImportExportModel {
   static validateServiceProviderRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.name?.trim()) {
-      errors.push({ row: index + 2, field: 'name', value: row.name, message: 'Provider name is required' });
+    const name = this.getValue(row, ['name', 'provider_name', 'company_name', 'vendor_name']);
+    if (!name?.trim()) {
+      errors.push({ row: index + 2, field: 'name', value: name, message: 'Provider name is required' });
     }
-    if (row.type) {
+
+    const type = this.getValue(row, ['type', 'provider_type', 'vendor_type', 'category']);
+    if (type) {
       const validTypes = ['general', 'specialist', 'dealership', 'emergency'];
-      if (!validTypes.includes(row.type.toLowerCase())) {
-        errors.push({ row: index + 2, field: 'type', value: row.type, message: 'Type must be: general, specialist, dealership, or emergency' });
+      if (!validTypes.includes(type.toLowerCase())) {
+        errors.push({ row: index + 2, field: 'type', value: type, message: 'Type must be: general, specialist, dealership, or emergency' });
       }
     }
 
@@ -455,20 +564,29 @@ export class ImportExportModel {
   static validateSparePartRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.part_number?.trim()) {
-      errors.push({ row: index + 2, field: 'part_number', value: row.part_number, message: 'Part number is required' });
+    const partNumber = this.getValue(row, ['part_number', 'part_no', 'part_id', 'sku', 'item_code']);
+    if (!partNumber?.trim()) {
+      errors.push({ row: index + 2, field: 'part_number', value: partNumber, message: 'Part number is required' });
     }
-    if (!row.name?.trim()) {
-      errors.push({ row: index + 2, field: 'name', value: row.name, message: 'Part name is required' });
+
+    const name = this.getValue(row, ['name', 'part_name', 'description', 'item_name']);
+    if (!name?.trim()) {
+      errors.push({ row: index + 2, field: 'name', value: name, message: 'Part name is required' });
     }
-    if (!row.category?.trim()) {
-      errors.push({ row: index + 2, field: 'category', value: row.category, message: 'Category is required' });
+
+    const category = this.getValue(row, ['category', 'part_category', 'type', 'component_type']);
+    if (!category?.trim()) {
+      errors.push({ row: index + 2, field: 'category', value: category, message: 'Category is required' });
     }
-    if (row.unit_cost && isNaN(parseFloat(row.unit_cost))) {
-      errors.push({ row: index + 2, field: 'unit_cost', value: row.unit_cost, message: 'Unit cost must be a number' });
+
+    const unitCost = this.getValue(row, ['unit_cost', 'cost', 'price', 'unit_price']);
+    if (unitCost && isNaN(parseFloat(unitCost))) {
+      errors.push({ row: index + 2, field: 'unit_cost', value: unitCost, message: 'Unit cost must be a number' });
     }
-    if (row.quantity_in_stock && isNaN(parseInt(row.quantity_in_stock))) {
-      errors.push({ row: index + 2, field: 'quantity_in_stock', value: row.quantity_in_stock, message: 'Quantity must be a number' });
+
+    const quantity = this.getValue(row, ['quantity_in_stock', 'quantity', 'qty', 'in_stock', 'stock']);
+    if (quantity && isNaN(parseInt(quantity))) {
+      errors.push({ row: index + 2, field: 'quantity_in_stock', value: quantity, message: 'Quantity must be a number' });
     }
 
     return errors;
@@ -477,28 +595,39 @@ export class ImportExportModel {
   static validateMaintenanceScheduleRow(row: any, index: number): ImportError[] {
     const errors: ImportError[] = [];
 
-    if (!row.vehicle_registration?.trim()) {
-      errors.push({ row: index + 2, field: 'vehicle_registration', value: row.vehicle_registration, message: 'Vehicle registration is required' });
+    const vehicleReg = this.getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    if (!vehicleReg?.trim()) {
+      errors.push({ row: index + 2, field: 'vehicle_registration', value: vehicleReg, message: 'Vehicle registration is required' });
     }
-    if (!row.schedule_type?.trim()) {
-      errors.push({ row: index + 2, field: 'schedule_type', value: row.schedule_type, message: 'Schedule type is required (mileage_based, time_based, both)' });
+
+    const scheduleType = this.getValue(row, ['schedule_type', 'type', 'schedule']);
+    if (!scheduleType?.trim()) {
+      errors.push({ row: index + 2, field: 'schedule_type', value: scheduleType, message: 'Schedule type is required (mileage_based, time_based, both)' });
     } else {
       const validTypes = ['mileage_based', 'time_based', 'both'];
-      if (!validTypes.includes(row.schedule_type.toLowerCase())) {
-        errors.push({ row: index + 2, field: 'schedule_type', value: row.schedule_type, message: 'Schedule type must be: mileage_based, time_based, or both' });
+      if (!validTypes.includes(scheduleType.toLowerCase())) {
+        errors.push({ row: index + 2, field: 'schedule_type', value: scheduleType, message: 'Schedule type must be: mileage_based, time_based, or both' });
       }
     }
-    if (!row.service_type?.trim()) {
-      errors.push({ row: index + 2, field: 'service_type', value: row.service_type, message: 'Service type is required' });
+
+    const serviceType = this.getValue(row, ['service_type', 'maintenance_type', 'service']);
+    if (!serviceType?.trim()) {
+      errors.push({ row: index + 2, field: 'service_type', value: serviceType, message: 'Service type is required' });
     }
-    if (!row.title?.trim()) {
-      errors.push({ row: index + 2, field: 'title', value: row.title, message: 'Title is required' });
+
+    const title = this.getValue(row, ['title', 'service_name', 'schedule_name', 'name']);
+    if (!title?.trim()) {
+      errors.push({ row: index + 2, field: 'title', value: title, message: 'Title is required' });
     }
-    if (row.interval_mileage && isNaN(parseInt(row.interval_mileage))) {
-      errors.push({ row: index + 2, field: 'interval_mileage', value: row.interval_mileage, message: 'Interval mileage must be a number' });
+
+    const intervalMileage = this.getValue(row, ['interval_mileage', 'mileage_interval', 'km_interval']);
+    if (intervalMileage && isNaN(parseInt(intervalMileage))) {
+      errors.push({ row: index + 2, field: 'interval_mileage', value: intervalMileage, message: 'Interval mileage must be a number' });
     }
-    if (row.interval_months && isNaN(parseInt(row.interval_months))) {
-      errors.push({ row: index + 2, field: 'interval_months', value: row.interval_months, message: 'Interval months must be a number' });
+
+    const intervalMonths = this.getValue(row, ['interval_months', 'months_interval', 'time_interval']);
+    if (intervalMonths && isNaN(parseInt(intervalMonths))) {
+      errors.push({ row: index + 2, field: 'interval_months', value: intervalMonths, message: 'Interval months must be a number' });
     }
 
     return errors;

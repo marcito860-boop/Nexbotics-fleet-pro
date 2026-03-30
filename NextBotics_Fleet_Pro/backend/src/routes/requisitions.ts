@@ -902,7 +902,7 @@ router.get('/stats', async (req: any, res) => {
 // ========== INSPECTION ENDPOINTS - with company verification ==========
 
 // GET /api/fleet/requisitions/:id/inspection - Get inspection details
-router.get('/:id/inspection', async (req: any, res) =>> {
+router.get('/:id/inspection', async (req: any, res) => {
   const { id } = req.params;
   const companyId = req.user?.companyId;
 
@@ -1201,6 +1201,79 @@ router.post('/:id/return', async (req: any, res) => {
   } catch (error: any) {
     console.error('Return confirmation error:', error);
     res.status(500).json(errorResponse('Failed to confirm return: ' + error.message));
+  }
+});
+
+// POST /api/fleet/requisitions/:id/complete-trip - Driver submits ending odometer
+router.post('/:id/complete-trip', async (req: any, res) => {
+  const { id } = req.params;
+  const { ending_odometer, return_notes } = req.body;
+  const companyId = req.user?.companyId;
+  const driverId = req.user?.staffId || req.user?.userId;
+
+  // Validation
+  if (!ending_odometer) {
+    return res.status(400).json(errorResponse('Ending odometer is required'));
+  }
+
+  try {
+    // Verify requisition belongs to company, is in transit, and user is the assigned driver
+    let reqSql = `
+      SELECT r.*, v.registration_num, d.staff_name as driver_name, r.starting_odometer
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1 AND r.status = 'in_transit'
+    `;
+    const reqParams: any[] = [id];
+    
+    if (companyId && companyId !== 'super_admin') {
+      reqSql += ' AND s.company_id = $2';
+      reqParams.push(companyId);
+    }
+    
+    const reqResult = await query(reqSql, reqParams);
+    if (reqResult.length === 0) {
+      return res.status(404).json(errorResponse('Requisition not found or vehicle not in transit'));
+    }
+    
+    const requisition = reqResult[0];
+    
+    // Verify the user is the assigned driver
+    if (requisition.driver_id !== driverId) {
+      return res.status(403).json(errorResponse('Only the assigned driver can complete this trip'));
+    }
+    
+    // Validate ending odometer is greater than starting
+    if (requisition.starting_odometer && 
+        parseInt(ending_odometer) <= parseInt(requisition.starting_odometer)) {
+      return res.status(400).json(errorResponse(
+        'Ending odometer must be greater than starting odometer',
+        { starting: requisition.starting_odometer, ending: ending_odometer }
+      ));
+    }
+    
+    // Update requisition with ending odometer
+    await query(`
+      UPDATE requisitions 
+      SET ending_odometer = $1,
+          return_notes = $2,
+          trip_completed_by_driver_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+    `, [ending_odometer, return_notes || '', id]);
+
+    res.json(successResponse({
+      id,
+      status: 'in_transit',
+      message: 'Trip completion submitted. Waiting for security confirmation.',
+      vehicle: requisition.registration_num,
+      starting_odometer: requisition.starting_odometer,
+      ending_odometer: ending_odometer
+    }, 'Trip completion recorded. Please proceed to security gate.'));
+  } catch (error: any) {
+    console.error('Complete trip error:', error);
+    res.status(500).json(errorResponse('Failed to complete trip: ' + error.message));
   }
 });
 
