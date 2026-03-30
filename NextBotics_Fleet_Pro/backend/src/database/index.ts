@@ -6,7 +6,7 @@ let pool: Pool | null = null;
 
 export const initDatabase = async () => {
   const connectionString = process.env.DATABASE_URL;
-  
+
   if (!connectionString) {
     throw new Error('DATABASE_URL environment variable is required');
   }
@@ -25,10 +25,10 @@ export const initDatabase = async () => {
   const client = await pool.connect();
   console.log('✅ PostgreSQL connected');
   client.release();
-  
+
   // Create tables
   await createTables();
-  
+
   return pool;
 };
 
@@ -73,14 +73,28 @@ const createTables = async () => {
       deleted_by UUID REFERENCES users(id)
     )
   `);
-  
+
   // Add company_id column if it doesn't exist (migration for existing tables)
   try {
     await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
   } catch (e) {
     // Column might already exist
   }
-  
+
+  // Add missing columns to users table (migrations for existing tables)
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`);
+  } catch (e) {
+    // Columns might already exist
+    console.log('Users table columns migration:', e);
+  }
+
   // Driver behavior scores history
   await pool.query(`
     CREATE TABLE IF NOT EXISTS driver_behavior_scores (
@@ -329,7 +343,7 @@ const createTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Add missing columns for existing tables (migrations)
   try {
     await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS notes TEXT`);
@@ -455,7 +469,7 @@ const createTables = async () => {
   `);
 
   // ==================== ACCIDENTS TABLES ====================
-  
+
   // Main accidents table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accidents (
@@ -483,7 +497,7 @@ const createTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Accident witnesses
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_witnesses (
@@ -495,7 +509,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Accident evidence (photos, documents)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_evidence (
@@ -508,7 +522,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Accident investigations
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_investigations (
@@ -527,7 +541,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Root cause analysis
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_root_causes (
@@ -544,7 +558,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // CAPA (Corrective and Preventive Actions)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_capa (
@@ -561,7 +575,7 @@ const createTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Lessons learned
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accident_lessons (
@@ -578,7 +592,7 @@ const createTables = async () => {
   `);
 
   // ==================== WORKSHOP: STOCK & INVOICING ====================
-  
+
   // Stock parts catalog
   await pool.query(`
     CREATE TABLE IF NOT EXISTS stock_parts (
@@ -600,7 +614,7 @@ const createTables = async () => {
       deleted_at TIMESTAMP
     )
   `);
-  
+
   // Stock usage (links parts to repairs/job cards)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS stock_usage (
@@ -615,7 +629,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Stock adjustments (manual corrections)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS stock_adjustments (
@@ -627,7 +641,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Customers (for invoicing)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customers (
@@ -642,7 +656,7 @@ const createTables = async () => {
       deleted_at TIMESTAMP
     )
   `);
-  
+
   // Invoices
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -668,7 +682,7 @@ const createTables = async () => {
       deleted_at TIMESTAMP
     )
   `);
-  
+
   // Invoice line items
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoice_items (
@@ -681,7 +695,7 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Invoice payments
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoice_payments (
@@ -697,7 +711,7 @@ const createTables = async () => {
   `);
 
   // ==================== GPS TRACKING TABLES ====================
-  
+
   // GPS Tracking - current location
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gps_tracking (
@@ -716,7 +730,7 @@ const createTables = async () => {
       UNIQUE(vehicle_id)
     )
   `);
-  
+
   // GPS History - location history
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gps_history (
@@ -732,7 +746,7 @@ const createTables = async () => {
       accuracy INTEGER DEFAULT 10
     )
   `);
-  
+
   // Geofences
   await pool.query(`
     CREATE TABLE IF NOT EXISTS geofences (
@@ -763,14 +777,14 @@ const createIndexes = async (poolRef: any) => {
     { name: 'idx_vehicles_department', table: 'vehicles', column: 'department' },
     { name: 'idx_vehicles_deleted_at', table: 'vehicles', column: 'deleted_at' },
     { name: 'idx_vehicles_registration', table: 'vehicles', column: 'registration_num' },
-    
+
     // Staff indexes
     { name: 'idx_staff_email', table: 'staff', column: 'email' },
     { name: 'idx_staff_company_id', table: 'staff', column: 'company_id' },
     { name: 'idx_staff_role', table: 'staff', column: 'role' },
     { name: 'idx_staff_department', table: 'staff', column: 'department' },
     { name: 'idx_staff_deleted_at', table: 'staff', column: 'deleted_at' },
-    
+
     // Accidents indexes
     { name: 'idx_accidents_vehicle_id', table: 'accidents', column: 'vehicle_id' },
     { name: 'idx_accidents_driver_id', table: 'accidents', column: 'driver_id' },
@@ -780,61 +794,61 @@ const createIndexes = async (poolRef: any) => {
     { name: 'idx_accident_witnesses_accident_id', table: 'accident_witnesses', column: 'accident_id' },
     { name: 'idx_accident_evidence_accident_id', table: 'accident_evidence', column: 'accident_id' },
     { name: 'idx_accident_investigations_accident_id', table: 'accident_investigations', column: 'accident_id' },
-    
+
     // Routes indexes
     { name: 'idx_routes_vehicle_id', table: 'routes', column: 'vehicle_id' },
     { name: 'idx_routes_driver1_id', table: 'routes', column: 'driver1_id' },
     { name: 'idx_routes_date', table: 'routes', column: 'route_date' },
-    
+
     // Fuel records indexes
     { name: 'idx_fuel_vehicle_id', table: 'fuel_records', column: 'vehicle_id' },
     { name: 'idx_fuel_date', table: 'fuel_records', column: 'fuel_date' },
-    
+
     // Requisitions indexes
     { name: 'idx_requisitions_status', table: 'requisitions', column: 'status' },
     { name: 'idx_requisitions_requested_by', table: 'requisitions', column: 'requested_by' },
     { name: 'idx_requisitions_vehicle_id', table: 'requisitions', column: 'vehicle_id' },
     { name: 'idx_requisitions_driver_id', table: 'requisitions', column: 'driver_id' },
-    
+
     // Repairs indexes
     { name: 'idx_repairs_vehicle_id', table: 'repairs', column: 'vehicle_id' },
     { name: 'idx_repairs_status', table: 'repairs', column: 'status' },
-    
+
     // Job cards indexes
     { name: 'idx_job_cards_vehicle_id', table: 'job_cards', column: 'vehicle_id' },
     { name: 'idx_job_cards_status', table: 'job_cards', column: 'status' },
     { name: 'idx_job_cards_number', table: 'job_cards', column: 'job_card_number' },
-    
+
     // Training indexes
     { name: 'idx_training_enrollments_staff', table: 'training_enrollments', column: 'staff_id' },
     { name: 'idx_training_enrollments_course', table: 'training_enrollments', column: 'course_id' },
     { name: 'idx_training_courses_code', table: 'training_courses', column: 'course_code' },
-    
+
     // API Keys indexes
     { name: 'idx_api_keys_hash', table: 'api_keys', column: 'key_hash' },
     { name: 'idx_api_keys_prefix', table: 'api_keys', column: 'key_prefix' },
     { name: 'idx_api_keys_active', table: 'api_keys', column: 'is_active' },
-    
+
     // Webhook indexes
     { name: 'idx_webhooks_active', table: 'webhooks', column: 'is_active' },
     { name: 'idx_webhook_deliveries_webhook_id', table: 'webhook_deliveries', column: 'webhook_id' },
-    
+
     // API usage indexes
     { name: 'idx_api_usage_created', table: 'api_usage_logs', column: 'created_at' },
     { name: 'idx_api_usage_key', table: 'api_usage_logs', column: 'api_key_id' },
-    
+
     // Audit logs indexes
     { name: 'idx_audit_logs_user', table: 'system_audit_logs', column: 'user_id' },
     { name: 'idx_audit_logs_created', table: 'system_audit_logs', column: 'created_at' },
     { name: 'idx_audit_logs_entity', table: 'system_audit_logs', column: 'entity_type, entity_id' },
-    
+
     // Stock/Parts indexes
     { name: 'idx_stock_parts_number', table: 'stock_parts', column: 'part_number' },
     { name: 'idx_stock_parts_category', table: 'stock_parts', column: 'category' },
     { name: 'idx_stock_usage_part_id', table: 'stock_usage', column: 'part_id' },
     { name: 'idx_stock_usage_repair_id', table: 'stock_usage', column: 'repair_id' },
     { name: 'idx_stock_usage_job_card_id', table: 'stock_usage', column: 'job_card_id' },
-    
+
     // Invoice indexes
     { name: 'idx_invoices_number', table: 'invoices', column: 'invoice_number' },
     { name: 'idx_invoices_customer_id', table: 'invoices', column: 'customer_id' },
@@ -843,7 +857,7 @@ const createIndexes = async (poolRef: any) => {
     { name: 'idx_invoices_date', table: 'invoices', column: 'invoice_date' },
     { name: 'idx_invoice_items_invoice_id', table: 'invoice_items', column: 'invoice_id' },
     { name: 'idx_invoice_payments_invoice_id', table: 'invoice_payments', column: 'invoice_id' },
-    
+
     // GPS Tracking indexes
     { name: 'idx_gps_tracking_vehicle_id', table: 'gps_tracking', column: 'vehicle_id' },
     { name: 'idx_gps_tracking_last_updated', table: 'gps_tracking', column: 'last_updated' },
@@ -861,7 +875,7 @@ const createIndexes = async (poolRef: any) => {
       console.warn(`⚠️ Failed to create index ${idx.name}:`, (err as Error).message);
     }
   }
-  
+
   console.log('✅ Database indexes created');
 
   // Create training tables
@@ -884,10 +898,10 @@ const createIndexes = async (poolRef: any) => {
       } catch (companyErr: any) {
         console.log('ℹ️ Company may already exist or table structure differs:', companyErr.message);
       }
-      
+
       const adminResult = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', ['admin@fleet.local']);
       const hashedPassword = bcrypt.hashSync('admin123', 10);
-      
+
       if (adminResult.rows.length === 0) {
         // Create new admin user with company_id reference
         await pool.query(
@@ -912,7 +926,7 @@ const createIndexes = async (poolRef: any) => {
 // Create training tables
 const createTrainingTables = async () => {
   if (!pool) return;
-  
+
   // Training courses
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_courses (
@@ -930,7 +944,7 @@ const createTrainingTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Training slides
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_slides (
@@ -946,7 +960,7 @@ const createTrainingTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Quiz questions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_quiz_questions (
@@ -963,7 +977,7 @@ const createTrainingTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Enrollments
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_enrollments (
@@ -987,7 +1001,7 @@ const createTrainingTables = async () => {
       UNIQUE(staff_id, course_id)
     )
   `);
-  
+
   // Quiz attempts
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_quiz_attempts (
@@ -1004,7 +1018,7 @@ const createTrainingTables = async () => {
       UNIQUE(enrollment_id, attempt_number)
     )
   `);
-  
+
   // Quiz attempt details for tracking used questions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_quiz_attempt_details (
@@ -1018,7 +1032,7 @@ const createTrainingTables = async () => {
       UNIQUE(attempt_id, question_id)
     )
   `);
-  
+
   // Certificates
   await pool.query(`
     CREATE TABLE IF NOT EXISTS training_certificates (
@@ -1034,7 +1048,7 @@ const createTrainingTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Seed default courses if none exist
   const courseCount = await pool.query('SELECT COUNT(*) as count FROM training_courses');
   if (parseInt(courseCount.rows[0].count) === 0) {
@@ -1052,7 +1066,7 @@ const createTrainingTables = async () => {
       ('DRUG-001', 'Drug & Alcohol Awareness', 'Understanding drug and alcohol policies, testing procedures, and impairment recognition.', 'Compliance', 1, 12, true)
     `);
     console.log('✅ Training courses seeded');
-    
+
     // Seed sample slides for courses
     await seedSampleSlides(pool);
   }
@@ -1063,12 +1077,12 @@ const seedSampleSlides = async (pool: Pool) => {
   // Check if slides already exist
   const slideCount = await pool.query('SELECT COUNT(*) as count FROM training_slides');
   if (parseInt(slideCount.rows[0].count) > 0) return;
-  
+
   // Get courses
   const courses = await pool.query('SELECT id, course_code FROM training_courses');
   const courseMap: Record<string, string> = {};
   courses.rows.forEach((c: any) => courseMap[c.course_code] = c.id);
-  
+
   const sampleSlides: Record<string, Array<{title: string, content: string, duration: number}>> = {
     'DEF-001': [
       { title: 'Introduction to Defensive Driving', content: 'Defensive driving is a set of driving skills that allows you to defend yourself against possible collisions caused by bad drivers, drunk drivers, and poor weather.\n\nKey Principles:\n• Stay alert and focused\n• Anticipate hazards\n• Maintain safe following distance\n• Adapt to road conditions', duration: 5 },
@@ -1095,12 +1109,12 @@ const seedSampleSlides = async (pool: Pool) => {
       { title: 'Recognizing Impairment', content: 'Signs of impairment in yourself or others:\n\n• Slurred speech\n• Unsteady balance\n• Bloodshot eyes\n• Unusual behavior\n• Delayed reactions\n\nIf you suspect impairment, do not drive. Contact your supervisor immediately.', duration: 5 }
     ]
   };
-  
+
   // Insert slides for courses that have them defined
   for (const [courseCode, slides] of Object.entries(sampleSlides)) {
     const courseId = courseMap[courseCode];
     if (!courseId) continue;
-    
+
     for (let i = 0; i < slides.length; i++) {
       const slide = slides[i];
       await pool.query(`
@@ -1115,7 +1129,7 @@ const seedSampleSlides = async (pool: Pool) => {
 // Create audit tables and seed templates
 const createAuditTables = async () => {
   if (!pool) return;
-  
+
   // Audit templates
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_templates (
@@ -1127,14 +1141,14 @@ const createAuditTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // FIX: Add template_name column if it doesn't exist (for older databases)
   try {
     await pool.query(`ALTER TABLE audit_templates ADD COLUMN IF NOT EXISTS template_name VARCHAR(255)`);
   } catch (e) {
     // Column might already exist, ignore error
   }
-  
+
   // Audit questions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_questions (
@@ -1149,7 +1163,7 @@ const createAuditTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Audit sessions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_sessions (
@@ -1171,7 +1185,7 @@ const createAuditTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Audit responses
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_responses (
@@ -1187,7 +1201,7 @@ const createAuditTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Audit corrective actions
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_corrective_actions (
@@ -1206,7 +1220,7 @@ const createAuditTables = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-  
+
   // Seed default templates if none exist
   const templateCount = await pool.query('SELECT COUNT(*) as count FROM audit_templates');
   if (parseInt(templateCount.rows[0].count) === 0) {
@@ -1215,9 +1229,9 @@ const createAuditTables = async () => {
       INSERT INTO audit_templates (id, template_name, description, is_active)
       VALUES ($1, $2, $3, $4) RETURNING id
     `, [uuidv4(), 'G4S Fleet Standard Audit', 'Comprehensive fleet operations audit covering 8 core modules with 45 checkpoint questions', true]);
-    
+
     const g4sId = g4sResult.rows[0].id;
-    
+
     // Insert G4S questions
     const g4sQuestions = [
       // Fleet Governance (1-6)
@@ -1274,20 +1288,20 @@ const createAuditTables = async () => {
       { module: 'Incident & Risk Management', text: 'Corrective actions are tracked', order: 44, evidence: true },
       { module: 'Incident & Risk Management', text: 'Insurance claims are managed properly', order: 45, evidence: false }
     ];
-    
+
     for (const q of g4sQuestions) {
       await pool.query(`
         INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
         VALUES ($1, $2, $3, $4, $5, $6)
       `, [uuidv4(), g4sId, q.module, q.text, q.order, q.evidence]);
     }
-    
+
     // Insert DVIR template
     const dvirResult = await pool.query(`
       INSERT INTO audit_templates (id, template_name, description, is_active)
       VALUES ($1, $2, $3, $4) RETURNING id
     `, [uuidv4(), 'Daily Vehicle Inspection (DVIR)', 'Pre-trip and post-trip vehicle inspection checklist for drivers', true]);
-    
+
     const dvirId = dvirResult.rows[0].id;
     const dvirQuestions = [
       { module: 'Brakes', text: 'Service brakes functioning properly', order: 1 },
@@ -1304,14 +1318,14 @@ const createAuditTables = async () => {
       { module: 'Fluid Levels', text: 'Oil, coolant, and other fluid levels adequate', order: 12 },
       { module: 'Documentation', text: 'Registration and insurance documents present', order: 13 }
     ];
-    
+
     for (const q of dvirQuestions) {
       await pool.query(`
         INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
         VALUES ($1, $2, $3, $4, $5, $6)
       `, [uuidv4(), dvirId, q.module, q.text, q.order, true]);
     }
-    
+
     console.log('✅ Audit templates seeded (G4S Fleet Standard, DVIR)');
   } else {
     // Templates exist but may have no questions - check and seed if needed
@@ -1326,14 +1340,14 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
     "SELECT id FROM audit_templates WHERE template_name = $1",
     ['G4S Fleet Standard Audit']
   );
-  
+
   if (g4sResult.rows.length > 0) {
     const g4sId = g4sResult.rows[0].id;
     const questionCount = await pool.query(
       'SELECT COUNT(*) as count FROM audit_questions WHERE template_id = $1',
       [g4sId]
     );
-    
+
     if (parseInt(questionCount.rows[0].count) === 0) {
       // G4S template has no questions - seed them
       const g4sQuestions = [
@@ -1383,7 +1397,7 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
         { module: 'Incident & Risk Management', text: 'Corrective actions are tracked', order: 44, evidence: true },
         { module: 'Incident & Risk Management', text: 'Insurance claims are managed properly', order: 45, evidence: false }
       ];
-      
+
       for (const q of g4sQuestions) {
         await pool.query(`
           INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
@@ -1393,20 +1407,20 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       console.log('✅ G4S Fleet Standard questions seeded (45 questions)');
     }
   }
-  
+
   // Check DVIR template
   const dvirResult = await pool.query(
     "SELECT id FROM audit_templates WHERE template_name = $1",
     ['Daily Vehicle Inspection (DVIR)']
   );
-  
+
   if (dvirResult.rows.length > 0) {
     const dvirId = dvirResult.rows[0].id;
     const questionCount = await pool.query(
       'SELECT COUNT(*) as count FROM audit_questions WHERE template_id = $1',
       [dvirId]
     );
-    
+
     if (parseInt(questionCount.rows[0].count) === 0) {
       const dvirQuestions = [
         { module: 'Brakes', text: 'Service brakes functioning properly', order: 1 },
@@ -1423,7 +1437,7 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
         { module: 'Fluid Levels', text: 'Oil, coolant, and other fluid levels adequate', order: 12 },
         { module: 'Documentation', text: 'Registration and insurance documents present', order: 13 }
       ];
-      
+
       for (const q of dvirQuestions) {
         await pool.query(`
           INSERT INTO audit_questions (id, template_id, module_name, question_text, question_order, requires_evidence)
@@ -1433,11 +1447,11 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
       console.log('✅ DVIR questions seeded (13 questions)');
     }
   }
-  
+
   // ========== MIGRATIONS ==========
   // Add missing columns to existing tables
   console.log('🔧 Running database migrations...');
-  
+
   // FIX: Clean up duplicate invoice indexes before migrations run
   // This fixes the "relation already exists" error from 004_add_invoices.sql
   try {
@@ -1452,11 +1466,11 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   } catch (err: any) {
     console.log('ℹ️  No existing invoice indexes to clean up');
   }
-  
+
   try {
     // Add soft delete columns to vehicles
     await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
     `);
@@ -1464,11 +1478,11 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   } catch (err: any) {
     console.error('❌ Migration failed (soft-delete):', err.message);
   }
-  
+
   try {
     // Check and add defect_notes to vehicles
     await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS defect_notes TEXT,
       ADD COLUMN IF NOT EXISTS defect_reported_at TIMESTAMP
     `);
@@ -1476,11 +1490,11 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   } catch (err: any) {
     console.error('❌ Migration failed (defect):', err.message);
   }
-  
+
   try {
     // Add service columns if missing
     await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS last_service_date DATE,
       ADD COLUMN IF NOT EXISTS next_service_due DATE
     `);
@@ -1536,16 +1550,16 @@ const seedQuestionsIfMissing = async (pool: Pool) => {
   } catch (err: any) {
     console.error('❌ Migration failed (related tables):', err.message);
   }
-  
+
   console.log('🔧 Migrations complete');
 };
 
 // Separate migration function for complex operations
 export const runMigrations = async () => {
   if (!pool) throw new Error('Database not initialized');
-  
+
   console.log('🔧 Running additional migrations...');
-  
+
   // FIX: Drop existing problematic indexes before migrations run
   // This fixes the "relation already exists" error from 004_add_invoices.sql
   try {
@@ -1560,14 +1574,14 @@ export const runMigrations = async () => {
   } catch (err: any) {
     console.log('ℹ️  No existing invoice indexes to clean up');
   }
-  
+
   // Run inspection module migration
   await runInspectionMigration(pool);
-  
+
   // Add deleted_at to staff table for consistency
   try {
     await pool.query(`
-      ALTER TABLE staff 
+      ALTER TABLE staff
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
     `);
@@ -1577,7 +1591,7 @@ export const runMigrations = async () => {
   }
 
   // ==================== PHOTO EVIDENCE TABLES ====================
-  
+
   // Audit photos table
   try {
     await pool.query(`
@@ -1629,15 +1643,15 @@ export const runMigrations = async () => {
 
   // Add company_id to existing tables for multi-tenant isolation
   const tablesNeedingCompanyId = [
-    'vehicles', 'staff', 'routes', 'fuel_records', 'repairs', 
+    'vehicles', 'staff', 'routes', 'fuel_records', 'repairs',
     'inventory_items', 'inventory_categories', 'training_courses',
     'audit_sessions', 'job_cards', 'accidents'
   ];
-  
+
   for (const table of tablesNeedingCompanyId) {
     try {
       await pool.query(`
-        ALTER TABLE ${table} 
+        ALTER TABLE ${table}
         ADD COLUMN IF NOT EXISTS company_id UUID
       `);
     } catch (err: any) {
@@ -1653,7 +1667,7 @@ export const runMigrations = async () => {
     const fs = await import('fs');
     const path = await import('path');
     const migrationPath = path.join(__dirname, '../../database/migrations/008_complete_schema_migration.sql');
-    
+
     if (fs.existsSync(migrationPath)) {
       const sql = fs.readFileSync(migrationPath, 'utf8');
       await pool.query(sql);
@@ -1669,26 +1683,26 @@ export const runMigrations = async () => {
 // Run inspection module migration
 const runInspectionMigration = async (pool: Pool) => {
   console.log('🔧 Running inspection module migration...');
-  
+
   try {
     // Check if inspection tables already exist
     const tableCheck = await pool.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
+        SELECT FROM information_schema.tables
         WHERE table_name = 'vehicle_inspections'
       )
     `);
-    
+
     if (tableCheck.rows[0].exists) {
       console.log('✅ Inspection tables already exist, skipping migration');
       return;
     }
-    
+
     // Read and execute the migration SQL
     const fs = await import('fs');
     const path = await import('path');
     const migrationPath = path.join(__dirname, '../../database/migrations_20250324_inspection_module.sql');
-    
+
     if (fs.existsSync(migrationPath)) {
       const sql = fs.readFileSync(migrationPath, 'utf8');
       await pool.query(sql);
@@ -1703,7 +1717,7 @@ const runInspectionMigration = async (pool: Pool) => {
 
 export const query = async (sql: string, params?: any[]): Promise<any> => {
   if (!pool) throw new Error('Database not initialized');
-  
+
   // Convert SQLite ? to PostgreSQL $n
   let pgSql = sql;
   let paramIndex = 1;
@@ -1711,7 +1725,7 @@ export const query = async (sql: string, params?: any[]): Promise<any> => {
     pgSql = pgSql.replace('?', `$${paramIndex}`);
     paramIndex++;
   }
-  
+
   const result = await pool.query(pgSql, params);
   return result.rows;
 };
