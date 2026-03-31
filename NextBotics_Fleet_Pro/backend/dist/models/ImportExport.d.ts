@@ -45,8 +45,11 @@ export declare class ImportExportModel {
     static parseCSV(csvContent: string): {
         headers: string[];
         rows: any[];
+        normalizedHeaders: string[];
     };
+    private static normalizeColumnName;
     private static parseCSVLine;
+    private static getValue;
     static validateVehicleRow(row: any, index: number): ImportError[];
     static validateDriverRow(row: any, index: number): ImportError[];
     static validateInventoryRow(row: any, index: number): ImportError[];

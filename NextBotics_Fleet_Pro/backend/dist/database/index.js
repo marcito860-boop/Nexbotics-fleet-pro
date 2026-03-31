@@ -87,6 +87,7 @@ const createTables = async () => {
     await pool.query(`
     CREATE TABLE IF NOT EXISTS staff (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
       staff_no VARCHAR(50) UNIQUE,
       staff_name VARCHAR(255) NOT NULL,
       email VARCHAR(255),
@@ -103,6 +104,27 @@ const createTables = async () => {
       deleted_by UUID REFERENCES users(id)
     )
   `);
+    // Add company_id column if it doesn't exist (migration for existing tables)
+    try {
+        await pool.query(`ALTER TABLE staff ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
+    }
+    catch (e) {
+        // Column might already exist
+    }
+    // Add missing columns to users table (migrations for existing tables)
+    try {
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false`);
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`);
+    }
+    catch (e) {
+        // Columns might already exist
+        console.log('Users table columns migration:', e);
+    }
     // Driver behavior scores history
     await pool.query(`
     CREATE TABLE IF NOT EXISTS driver_behavior_scores (
@@ -336,10 +358,22 @@ const createTables = async () => {
       trip_duration_minutes INTEGER,
       returned_at TIMESTAMP,
       security_notes TEXT,
+      notes TEXT,
+      completed_at TIMESTAMP,
+      completion_notes TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+    // Add missing columns for existing tables (migrations)
+    try {
+        await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS notes TEXT`);
+        await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`);
+        await pool.query(`ALTER TABLE requisitions ADD COLUMN IF NOT EXISTS completion_notes TEXT`);
+    }
+    catch (e) {
+        // Columns might already exist
+    }
     // Analytics cache table
     await pool.query(`
     CREATE TABLE IF NOT EXISTS analytics_cache (
@@ -737,6 +771,7 @@ const createIndexes = async (poolRef) => {
         { name: 'idx_vehicles_registration', table: 'vehicles', column: 'registration_num' },
         // Staff indexes
         { name: 'idx_staff_email', table: 'staff', column: 'email' },
+        { name: 'idx_staff_company_id', table: 'staff', column: 'company_id' },
         { name: 'idx_staff_role', table: 'staff', column: 'role' },
         { name: 'idx_staff_department', table: 'staff', column: 'department' },
         { name: 'idx_staff_deleted_at', table: 'staff', column: 'deleted_at' },
@@ -1357,7 +1392,7 @@ const seedQuestionsIfMissing = async (pool) => {
     try {
         // Add soft delete columns to vehicles
         await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
     `);
@@ -1369,7 +1404,7 @@ const seedQuestionsIfMissing = async (pool) => {
     try {
         // Check and add defect_notes to vehicles
         await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS defect_notes TEXT,
       ADD COLUMN IF NOT EXISTS defect_reported_at TIMESTAMP
     `);
@@ -1381,7 +1416,7 @@ const seedQuestionsIfMissing = async (pool) => {
     try {
         // Add service columns if missing
         await pool.query(`
-      ALTER TABLE vehicles 
+      ALTER TABLE vehicles
       ADD COLUMN IF NOT EXISTS last_service_date DATE,
       ADD COLUMN IF NOT EXISTS next_service_due DATE
     `);
@@ -1465,7 +1500,7 @@ const runMigrations = async () => {
     // Add deleted_at to staff table for consistency
     try {
         await pool.query(`
-      ALTER TABLE staff 
+      ALTER TABLE staff
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP,
       ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(id)
     `);
@@ -1533,7 +1568,7 @@ const runMigrations = async () => {
     for (const table of tablesNeedingCompanyId) {
         try {
             await pool.query(`
-        ALTER TABLE ${table} 
+        ALTER TABLE ${table}
         ADD COLUMN IF NOT EXISTS company_id UUID
       `);
         }
@@ -1570,7 +1605,7 @@ const runInspectionMigration = async (pool) => {
         // Check if inspection tables already exist
         const tableCheck = await pool.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
+        SELECT FROM information_schema.tables
         WHERE table_name = 'vehicle_inspections'
       )
     `);

@@ -53,6 +53,7 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const auth_2 = __importDefault(require("./routes/auth"));
 const vehicles_1 = __importDefault(require("./routes/vehicles"));
 const staff_1 = __importDefault(require("./routes/staff"));
+const users_1 = __importDefault(require("./routes/users"));
 const routes_1 = __importDefault(require("./routes/routes"));
 const fuel_1 = __importDefault(require("./routes/fuel"));
 const repairs_1 = __importDefault(require("./routes/repairs"));
@@ -63,7 +64,7 @@ const analytics_1 = __importDefault(require("./routes/analytics"));
 const requisitions_1 = __importDefault(require("./routes/requisitions"));
 const accidents_1 = __importDefault(require("./routes/accidents"));
 const audits_1 = __importDefault(require("./routes/audits"));
-const training_1 = __importDefault(require("./routes/training"));
+const training_enhanced_1 = __importDefault(require("./routes/training_enhanced"));
 const audit_schedules_1 = __importDefault(require("./routes/audit-schedules"));
 const integrations_1 = __importDefault(require("./routes/integrations"));
 const integration_providers_1 = __importDefault(require("./routes/integration-providers"));
@@ -77,6 +78,8 @@ const inspections_1 = __importDefault(require("./routes/inspections"));
 const v1_1 = __importDefault(require("./routes/api/v1"));
 const seed_demo_1 = __importDefault(require("./routes/seed-demo"));
 const gps_1 = __importDefault(require("./routes/gps"));
+const alerts_1 = __importDefault(require("./routes/alerts"));
+const maintenance_1 = __importDefault(require("./routes/maintenance"));
 const operationsAI = __importStar(require("./services/operationsAI"));
 dotenv_1.default.config();
 // Debug: Log environment variables (without secrets)
@@ -186,9 +189,10 @@ app.get('/api/health', async (req, res) => {
 app.use('/api/seed-demo', seed_demo_1.default);
 // Public routes
 app.use('/api/auth', rateLimiter_1.authRateLimiter, auth_2.default);
-// Protected routes
+// Protected routes - Legacy paths (keep for backward compatibility)
 app.use('/api/vehicles', auth_1.authenticateToken, vehicles_1.default);
 app.use('/api/staff', auth_1.authenticateToken, staff_1.default);
+app.use('/api/users', auth_1.authenticateToken, users_1.default);
 app.use('/api/routes', auth_1.authenticateToken, routes_1.default);
 app.use('/api/fuel', auth_1.authenticateToken, fuel_1.default);
 app.use('/api/repairs', auth_1.authenticateToken, repairs_1.default);
@@ -199,8 +203,32 @@ app.use('/api/analytics', auth_1.authenticateToken, analytics_1.default);
 app.use('/api/requisitions', auth_1.authenticateToken, requisitions_1.default);
 app.use('/api/accidents', auth_1.authenticateToken, accidents_1.default);
 app.use('/api/audits', auth_1.authenticateToken, audits_1.default);
-app.use('/api/training', auth_1.authenticateToken, training_1.default);
+app.use('/api/training', auth_1.authenticateToken, training_enhanced_1.default);
 app.use('/api/audit-schedules', auth_1.authenticateToken, audit_schedules_1.default);
+// Protected routes - Fleet API paths (matches frontend expectations)
+app.use('/api/fleet/vehicles', auth_1.authenticateToken, vehicles_1.default);
+app.use('/api/fleet/drivers', auth_1.authenticateToken, (req, res, next) => {
+    // Rewrite the URL to /drivers so staffRoutes can handle it
+    req.url = '/drivers' + req.url;
+    (0, staff_1.default)(req, res, next);
+});
+app.use('/api/fleet/routes', auth_1.authenticateToken, routes_1.default);
+app.use('/api/fleet/fuel', auth_1.authenticateToken, fuel_1.default);
+app.use('/api/fleet/assignments', auth_1.authenticateToken, requisitions_1.default); // Map assignments to requisitions
+app.use('/api/fleet/trips', auth_1.authenticateToken, requisitions_1.default); // Map trips to requisitions
+app.use('/api/fleet/requisitions', auth_1.authenticateToken, requisitions_1.default);
+app.use('/api/fleet/accidents', auth_1.authenticateToken, accidents_1.default);
+app.use('/api/fleet/audits', auth_1.authenticateToken, audits_1.default);
+app.use('/api/fleet/training', auth_1.authenticateToken, training_enhanced_1.default);
+app.use('/api/fleet/alerts', auth_1.authenticateToken, alerts_1.default);
+app.use('/api/fleet/analytics', auth_1.authenticateToken, analytics_1.default);
+app.use('/api/fleet/maintenance', auth_1.authenticateToken, maintenance_1.default);
+app.use('/api/fleet/inventory', auth_1.authenticateToken, workshop_1.default); // Inventory from workshop
+app.use('/api/fleet/invoices', auth_1.authenticateToken, workshop_1.default); // Invoices from workshop
+app.use('/api/fleet/risks', auth_1.authenticateToken, riskIntelligence_1.default);
+app.use('/api/fleet/documents', auth_1.authenticateToken, upload_1.default);
+app.use('/api/fleet/suppliers', auth_1.authenticateToken, workshop_1.default);
+app.use('/api/fleet/maintenance', auth_1.authenticateToken, repairs_1.default);
 // Integration routes (includes public API with API key auth)
 app.use('/api/integrations', integrations_1.default);
 // Integration providers (ERP, telematics, fuel cards, etc.)

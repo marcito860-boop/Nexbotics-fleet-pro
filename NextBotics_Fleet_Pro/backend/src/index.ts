@@ -41,6 +41,7 @@ import apiV1Routes from './routes/api/v1';
 import seedDemoRoutes from './routes/seed-demo';
 import gpsRoutes from './routes/gps';
 import alertsRoutes from './routes/alerts';
+import maintenanceRoutes from './routes/maintenance';
 
 // Import services for webhooks and operations
 import * as webhookService from './services/webhook';
@@ -211,6 +212,7 @@ app.use('/api/fleet/audits', authenticateToken, auditRoutes);
 app.use('/api/fleet/training', authenticateToken, trainingRoutes);
 app.use('/api/fleet/alerts', authenticateToken, alertsRoutes);
 app.use('/api/fleet/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/fleet/maintenance', authenticateToken, maintenanceRoutes);
 app.use('/api/fleet/inventory', authenticateToken, workshopRoutes); // Inventory from workshop
 app.use('/api/fleet/invoices', authenticateToken, workshopRoutes); // Invoices from workshop
 app.use('/api/fleet/risks', authenticateToken, riskIntelligenceRoutes);

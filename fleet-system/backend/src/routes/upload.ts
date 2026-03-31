@@ -60,9 +60,48 @@ router.post('/', upload.single('file'), async (req, res) => {
       }
     }
 
+    // Build detailed summary
+    const summary = [];
+    let totalImported = 0;
+    
+    if (results.vehicles && results.vehicles > 0) {
+      summary.push(`${results.vehicles} vehicle(s)`);
+      totalImported += results.vehicles;
+    }
+    if (results.staff && results.staff > 0) {
+      summary.push(`${results.staff} staff member(s)`);
+      totalImported += results.staff;
+    }
+    if (results.routes && results.routes > 0) {
+      summary.push(`${results.routes} route(s)`);
+      totalImported += results.routes;
+    }
+    if (results.fuel && results.fuel > 0) {
+      summary.push(`${results.fuel} fuel record(s)`);
+      totalImported += results.fuel;
+    }
+    if (results.repairs && results.repairs > 0) {
+      summary.push(`${results.repairs} repair record(s)`);
+      totalImported += results.repairs;
+    }
+    if (results.accidents && results.accidents > 0) {
+      summary.push(`${results.accidents} accident record(s)`);
+      totalImported += results.accidents;
+    }
+    if (results.requisitions && results.requisitions > 0) {
+      summary.push(`${results.requisitions} requisition(s)`);
+      totalImported += results.requisitions;
+    }
+
+    const message = totalImported > 0 
+      ? `Successfully imported ${totalImported} record(s): ${summary.join(', ')}`
+      : 'No records were imported. Please check your file format and column headers.';
+
     res.json({ 
-      message: 'Excel import completed',
-      imported: results
+      success: totalImported > 0,
+      message,
+      imported: results,
+      total: totalImported
     });
   } catch (error: any) {
     console.error('Import error:', error);
@@ -74,22 +113,31 @@ async function importVehicles(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Vehicle headers:', headers);
   
-  // Find column indices
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Find column indices - support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const regIdx = getCol('registration');
-  const yearManIdx = getCol('manufacture');
-  const yearPurIdx = getCol('purchase');
-  const makeIdx = getCol('make');
-  const ownershipIdx = getCol('ownership');
-  const deptIdx = getCol('department');
-  const branchIdx = getCol('branch');
-  const minorIdx = getCol('minor');
-  const mediumIdx = getCol('medium');
-  const majorIdx = getCol('major');
-  const rateIdx = getCol('consumption');
-  const statusIdx = getCol('status');
-  const mileageIdx = getCol('mileage');
+  const regIdx = getCol(['registration', 'reg_num', 'reg no', 'plate', 'vehicle_reg']);
+  const yearManIdx = getCol(['manufacture', 'year', 'year_of_manufacture', 'yr']);
+  const yearPurIdx = getCol(['purchase', 'year_of_purchase', 'purchase_year']);
+  const makeIdx = getCol(['make', 'make_model', 'model', 'brand']);
+  const typeIdx = getCol(['type', 'vehicle_type', 'category']);
+  const ownershipIdx = getCol(['ownership', 'owner']);
+  const deptIdx = getCol(['department', 'dept']);
+  const branchIdx = getCol(['branch', 'location', 'office']);
+  const minorIdx = getCol(['minor', 'minor_service']);
+  const mediumIdx = getCol(['medium', 'medium_service']);
+  const majorIdx = getCol(['major', 'major_service']);
+  const rateIdx = getCol(['consumption', 'fuel_type', 'target_consumption', 'consumption_rate']);
+  const statusIdx = getCol(['status', 'state', 'condition']);
+  const mileageIdx = getCol(['mileage', 'odometer', 'current_mileage', 'km']);
+
+  console.log('Column mappings:', { regIdx, yearManIdx, makeIdx, typeIdx, deptIdx, statusIdx });
 
   let count = 0;
 
@@ -97,10 +145,26 @@ async function importVehicles(data: any[][]) {
     const row = data[i];
     const regNum = regIdx >= 0 ? row[regIdx] : row[0];
     
-    if (!regNum) continue;
+    if (!regNum) {
+      console.log(`Row ${i}: Skipping - no registration number`);
+      continue;
+    }
 
     try {
       const id = uuidv4();
+      
+      // Build make_model from make + model + type if available
+      let makeModel = 'Unknown';
+      if (makeIdx >= 0 && row[makeIdx]) {
+        makeModel = String(row[makeIdx]);
+        // Append type if available and different
+        if (typeIdx >= 0 && row[typeIdx] && String(row[typeIdx]) !== makeModel) {
+          makeModel += ' ' + String(row[typeIdx]);
+        }
+      } else if (typeIdx >= 0 && row[typeIdx]) {
+        makeModel = String(row[typeIdx]);
+      }
+      
       await query(`
         INSERT INTO vehicles (
           id, registration_num, year_of_manufacture, year_of_purchase,
@@ -110,7 +174,13 @@ async function importVehicles(data: any[][]) {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (registration_num) DO UPDATE SET
           year_of_manufacture = EXCLUDED.year_of_manufacture,
+          year_of_purchase = EXCLUDED.year_of_purchase,
           make_model = EXCLUDED.make_model,
+          ownership = EXCLUDED.ownership,
+          department = EXCLUDED.department,
+          branch = EXCLUDED.branch,
+          status = EXCLUDED.status,
+          current_mileage = EXCLUDED.current_mileage,
           updated_at = CURRENT_TIMESTAMP
       `, [
         id, 
@@ -119,7 +189,7 @@ async function importVehicles(data: any[][]) {
         yearPurIdx >= 0 ? parseInt(row[yearPurIdx]) || null : null,
         200000, // replacement_mileage
         10, // replacement_age
-        makeIdx >= 0 ? row[makeIdx] : 'Unknown', 
+        makeModel, 
         ownershipIdx >= 0 ? row[ownershipIdx] : 'Company',
         deptIdx >= 0 ? row[deptIdx] : 'Transport', 
         branchIdx >= 0 ? row[branchIdx] : 'Nairobi HQ',
@@ -131,10 +201,12 @@ async function importVehicles(data: any[][]) {
         mileageIdx >= 0 ? parseInt(row[mileageIdx]) || 0 : 0
       ]);
       count++;
+      console.log(`Row ${i}: Imported vehicle ${regNum}`);
     } catch (e: any) {
       console.error('Vehicle row error:', e.message, row);
     }
   }
+  console.log(`Total vehicles imported: ${count}`);
   return count;
 }
 
@@ -142,37 +214,56 @@ async function importStaff(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Staff headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const staffNoIdx = getCol('staff_no');
-  const nameIdx = getCol('name');
-  const emailIdx = getCol('email');
-  const phoneIdx = getCol('phone');
-  const desigIdx = getCol('designation');
-  const deptIdx = getCol('department');
-  const branchIdx = getCol('branch');
-  const roleIdx = getCol('role');
+  const staffNoIdx = getCol(['staff_no', 'employee_id', 'staff id', 'emp_id', 'employee no', 'id']);
+  const nameIdx = getCol(['name', 'staff_name', 'full_name', 'employee_name']);
+  const emailIdx = getCol(['email', 'email_address', 'e-mail']);
+  const phoneIdx = getCol(['phone', 'mobile', 'telephone', 'contact', 'phone_number']);
+  const desigIdx = getCol(['designation', 'position', 'title', 'job_title']);
+  const deptIdx = getCol(['department', 'dept']);
+  const branchIdx = getCol(['branch', 'location', 'office']);
+  const roleIdx = getCol(['role', 'job_role', 'type']);
+
+  console.log('Staff column mappings:', { staffNoIdx, nameIdx, emailIdx, phoneIdx, roleIdx });
 
   let count = 0;
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
-    const staffName = nameIdx >= 0 ? row[nameIdx] : row[1];
+    const staffName = nameIdx >= 0 ? row[nameIdx] : row[0];
     
-    if (!staffName) continue;
+    if (!staffName) {
+      console.log(`Row ${i}: Skipping - no staff name`);
+      continue;
+    }
 
     try {
       const id = uuidv4();
+      const staffNo = staffNoIdx >= 0 ? row[staffNoIdx] : `ST${1000 + i}`;
+      
       await query(`
         INSERT INTO staff (id, staff_no, staff_name, email, phone, designation, department, branch, role, comments)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (staff_no) DO UPDATE SET
           staff_name = EXCLUDED.staff_name,
           email = EXCLUDED.email,
+          phone = EXCLUDED.phone,
+          designation = EXCLUDED.designation,
+          department = EXCLUDED.department,
+          branch = EXCLUDED.branch,
+          role = EXCLUDED.role,
           updated_at = CURRENT_TIMESTAMP
       `, [
         id, 
-        staffNoIdx >= 0 ? row[staffNoIdx] : `ST${1000 + i}`, 
+        staffNo,
         staffName,
         emailIdx >= 0 ? row[emailIdx] : null,
         phoneIdx >= 0 ? row[phoneIdx] : null,
@@ -183,10 +274,12 @@ async function importStaff(data: any[][]) {
         ''
       ]);
       count++;
+      console.log(`Row ${i}: Imported staff ${staffName} (${staffNo})`);
     } catch (e: any) {
       console.error('Staff row error:', e.message, row);
     }
   }
+  console.log(`Total staff imported: ${count}`);
   return count;
 }
 
@@ -194,17 +287,26 @@ async function importRoutes(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Routes headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const dateIdx = getCol('route_date');
-  const nameIdx = getCol('route_name');
-  const driverIdx = getCol('driver1');
-  const vehicleIdx = getCol('vehicle');
-  const targetKmIdx = getCol('target_km');
-  const actualKmIdx = getCol('actual_km');
-  const targetFuelIdx = getCol('target_fuel');
-  const actualFuelIdx = getCol('actual_fuel');
-  const varianceIdx = getCol('variance');
+  const dateIdx = getCol(['route_date', 'date', 'trip_date', 'assignment_date']);
+  const nameIdx = getCol(['route_name', 'route', 'trip', 'assignment', 'destination']);
+  const driverIdx = getCol(['driver', 'driver1', 'driver_id', 'staff_no', 'driver_name']);
+  const vehicleIdx = getCol(['vehicle', 'vehicle_reg', 'registration', 'reg_num', 'plate']);
+  const targetKmIdx = getCol(['target_km', 'expected_km', 'planned_km', 'estimated_km']);
+  const actualKmIdx = getCol(['actual_km', 'km', 'distance', 'mileage']);
+  const targetFuelIdx = getCol(['target_fuel', 'expected_fuel', 'planned_fuel', 'fuel_target']);
+  const actualFuelIdx = getCol(['actual_fuel', 'fuel_used', 'fuel_consumed', 'consumption']);
+  const varianceIdx = getCol(['variance', 'difference', 'deviation']);
+
+  console.log('Routes column mappings:', { dateIdx, nameIdx, driverIdx, vehicleIdx });
 
   let count = 0;
   
@@ -212,7 +314,10 @@ async function importRoutes(data: any[][]) {
     const row = data[i];
     const routeName = nameIdx >= 0 ? row[nameIdx] : row[1];
     
-    if (!routeName) continue;
+    if (!routeName) {
+      console.log(`Row ${i}: Skipping - no route name`);
+      continue;
+    }
 
     try {
       // Look up driver by staff_no or name
@@ -256,12 +361,13 @@ async function importRoutes(data: any[][]) {
         ''
       ]);
       count++;
+      console.log(`Row ${i}: Imported route ${routeName}`);
     } catch (e: any) {
       console.error('Routes row error:', e.message, row);
     }
   }
   
-  console.log(`Imported ${count} routes`);
+  console.log(`Total routes imported: ${count}`);
   return count;
 }
 
@@ -269,18 +375,27 @@ async function importFuel(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Fuel headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const deptIdx = getCol('department');
-  const dateIdx = getCol('date');
-  const regIdx = getCol('registration');
-  const cardNumIdx = getCol('card_num');
-  const cardNameIdx = getCol('card_name');
-  const pastIdx = getCol('past');
-  const currentIdx = getCol('current');
-  const qtyIdx = getCol('quantity');
-  const amtIdx = getCol('amount');
-  const placeIdx = getCol('place');
+  const deptIdx = getCol(['department', 'dept']);
+  const dateIdx = getCol(['date', 'fuel_date', 'transaction_date']);
+  const regIdx = getCol(['registration', 'vehicle_reg', 'reg_num', 'plate', 'vehicle']);
+  const cardNumIdx = getCol(['card_num', 'card_number', 'fuel_card']);
+  const cardNameIdx = getCol(['card_name', 'station', 'vendor', 'supplier']);
+  const pastIdx = getCol(['past', 'past_mileage', 'previous_km', 'start_km']);
+  const currentIdx = getCol(['current', 'current_mileage', 'odometer', 'km', 'end_km']);
+  const qtyIdx = getCol(['quantity', 'liters', 'qty', 'volume', 'fuel_qty']);
+  const amtIdx = getCol(['amount', 'cost', 'total', 'price', 'value']);
+  const placeIdx = getCol(['place', 'location', 'station', 'vendor']);
+
+  console.log('Fuel column mappings:', { regIdx, dateIdx, qtyIdx, amtIdx, currentIdx });
 
   let count = 0;
   
@@ -288,13 +403,16 @@ async function importFuel(data: any[][]) {
     const row = data[i];
     const regNum = regIdx >= 0 ? row[regIdx] : row[2];
     
-    if (!regNum) continue;
+    if (!regNum) {
+      console.log(`Row ${i}: Skipping - no vehicle registration`);
+      continue;
+    }
 
     try {
       // Lookup vehicle
       const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [String(regNum).trim()]);
       if (vehicleRes.length === 0) {
-        console.log('Vehicle not found:', regNum);
+        console.log(`Row ${i}: Vehicle not found: ${regNum}`);
         continue;
       }
       const vehicleId = vehicleRes[0].id;
@@ -328,10 +446,12 @@ async function importFuel(data: any[][]) {
         placeIdx >= 0 ? row[placeIdx] : 'Nairobi'
       ]);
       count++;
+      console.log(`Row ${i}: Imported fuel record for ${regNum} - ${qty}L`);
     } catch (e: any) {
       console.error('Fuel row error:', e.message, row);
     }
   }
+  console.log(`Total fuel records imported: ${count}`);
   return count;
 }
 
@@ -339,15 +459,24 @@ async function importRepairs(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Repairs headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const dateIdx = getCol('date_in');
-  const regIdx = getCol('registration');
-  const maintIdx = getCol('maintenance');
-  const descIdx = getCol('description');
-  const odoIdx = getCol('odometer');
-  const techIdx = getCol('technician');
-  const garageIdx = getCol('garage');
+  const dateIdx = getCol(['date_in', 'date', 'repair_date', 'start_date']);
+  const regIdx = getCol(['registration', 'vehicle_reg', 'reg_num', 'plate', 'vehicle']);
+  const maintIdx = getCol(['maintenance', 'service_type', 'repair_type', 'type']);
+  const descIdx = getCol(['description', 'issue', 'problem', 'details', 'breakdown']);
+  const odoIdx = getCol(['odometer', 'mileage', 'km', 'odometer_reading']);
+  const techIdx = getCol(['technician', 'mechanic', 'assigned_to', 'repairer']);
+  const garageIdx = getCol(['garage', 'workshop', 'service_center', 'vendor']);
+
+  console.log('Repairs column mappings:', { dateIdx, regIdx, descIdx, techIdx });
 
   let count = 0;
   
@@ -355,12 +484,15 @@ async function importRepairs(data: any[][]) {
     const row = data[i];
     const regNum = regIdx >= 0 ? row[regIdx] : row[1];
     
-    if (!regNum) continue;
+    if (!regNum) {
+      console.log(`Row ${i}: Skipping - no vehicle registration`);
+      continue;
+    }
 
     try {
       const vehicleRes = await query('SELECT id FROM vehicles WHERE registration_num = $1', [String(regNum).trim()]);
       if (vehicleRes.length === 0) {
-        console.log('Vehicle not found for repair:', regNum);
+        console.log(`Row ${i}: Vehicle not found for repair: ${regNum}`);
         continue;
       }
       
@@ -381,10 +513,12 @@ async function importRepairs(data: any[][]) {
         garageIdx >= 0 ? row[garageIdx] : 'City Garage'
       ]);
       count++;
+      console.log(`Row ${i}: Imported repair for ${regNum}`);
     } catch (e: any) {
       console.error('Repair row error:', e.message, row);
     }
   }
+  console.log(`Total repairs imported: ${count}`);
   return count;
 }
 
@@ -403,29 +537,43 @@ async function importAccidents(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Accident headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const caseIdx = getCol('case_number');
-  const dateIdx = getCol('accident_date');
-  const gpsIdx = getCol('gps_location');
-  const regIdx = getCol('registration');
-  const driverIdx = getCol('driver');
-  const typeIdx = getCol('accident_type');
-  const severityIdx = getCol('severity');
-  const injuriesIdx = getCol('injuries');
-  const policeIdx = getCol('police');
-  const thirdPartyIdx = getCol('third_party');
-  const weatherIdx = getCol('weather');
-  const roadIdx = getCol('road');
-  const descIdx = getCol('description');
-  const statusIdx = getCol('status');
+  const caseIdx = getCol(['case_number', 'case_no', 'case', 'ref']);
+  const dateIdx = getCol(['accident_date', 'date', 'incident_date', 'occurred']);
+  const gpsIdx = getCol(['gps_location', 'gps', 'location', 'coordinates', 'place']);
+  const regIdx = getCol(['registration', 'vehicle_reg', 'reg_num', 'plate', 'vehicle']);
+  const driverIdx = getCol(['driver', 'driver_id', 'staff_no', 'driver_name', 'operator']);
+  const typeIdx = getCol(['accident_type', 'type', 'incident_type', 'classification']);
+  const severityIdx = getCol(['severity', 'severity_level', 'impact', 'seriousness']);
+  const injuriesIdx = getCol(['injuries', 'injuries_reported', 'casualties', 'hurt']);
+  const policeIdx = getCol(['police', 'police_notified', 'authorities', 'reported']);
+  const thirdPartyIdx = getCol(['third_party', 'thirdparty', 'other_party', 'external']);
+  const weatherIdx = getCol(['weather', 'weather_condition', 'conditions']);
+  const roadIdx = getCol(['road', 'road_condition', 'surface']);
+  const descIdx = getCol(['description', 'incident_description', 'details', 'narrative', 'what_happened']);
+  const statusIdx = getCol(['status', 'state', 'case_status']);
+
+  console.log('Accidents column mappings:', { caseIdx, dateIdx, regIdx, driverIdx, typeIdx });
 
   let count = 0;
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     
-    if (!row[0]) continue;
+    // Require at least a date or description to process
+    const hasData = (dateIdx >= 0 && row[dateIdx]) || (descIdx >= 0 && row[descIdx]) || row[0];
+    if (!hasData) {
+      console.log(`Row ${i}: Skipping - no accident data`);
+      continue;
+    }
 
     try {
       // Look up vehicle by registration
@@ -440,7 +588,7 @@ async function importAccidents(data: any[][]) {
       let driverId = null;
       const driverRef = driverIdx >= 0 ? row[driverIdx] : '';
       if (driverRef) {
-        const drvRes = await query('SELECT id FROM staff WHERE staff_no = $1', [driverRef]);
+        const drvRes = await query('SELECT id FROM staff WHERE staff_no = $1 OR staff_name = $1', [driverRef]);
         if (drvRes.length > 0) driverId = drvRes[0].id;
       }
 
@@ -459,6 +607,8 @@ async function importAccidents(data: any[][]) {
         ON CONFLICT (case_number) DO UPDATE SET
           accident_date = EXCLUDED.accident_date,
           incident_description = EXCLUDED.incident_description,
+          vehicle_id = EXCLUDED.vehicle_id,
+          driver_id = EXCLUDED.driver_id,
           updated_at = CURRENT_TIMESTAMP
       `, [
         id,
@@ -469,21 +619,22 @@ async function importAccidents(data: any[][]) {
         driverId,
         typeIdx >= 0 ? row[typeIdx] : 'Collision',
         severityIdx >= 0 ? row[severityIdx] : 'Minor',
-        injuriesIdx >= 0 ? (row[injuriesIdx] === true || row[injuriesIdx] === 'true') : false,
-        policeIdx >= 0 ? (row[policeIdx] === true || row[policeIdx] === 'true') : false,
-        thirdPartyIdx >= 0 ? (row[thirdPartyIdx] === true || row[thirdPartyIdx] === 'true') : false,
+        injuriesIdx >= 0 ? (row[injuriesIdx] === true || row[injuriesIdx] === 'true' || row[injuriesIdx] === 'yes' || row[injuriesIdx] === 'YES') : false,
+        policeIdx >= 0 ? (row[policeIdx] === true || row[policeIdx] === 'true' || row[policeIdx] === 'yes' || row[policeIdx] === 'YES') : false,
+        thirdPartyIdx >= 0 ? (row[thirdPartyIdx] === true || row[thirdPartyIdx] === 'true' || row[thirdPartyIdx] === 'yes' || row[thirdPartyIdx] === 'YES') : false,
         weatherIdx >= 0 ? row[weatherIdx] : 'Clear',
         roadIdx >= 0 ? row[roadIdx] : 'Dry',
         descIdx >= 0 ? row[descIdx] : '',
         statusIdx >= 0 ? row[statusIdx] : 'Reported'
       ]);
       count++;
+      console.log(`Row ${i}: Imported accident case ${caseNumber}`);
     } catch (e: any) {
       console.error('Accident row error:', e.message, row);
     }
   }
   
-  console.log(`Imported ${count} accidents`);
+  console.log(`Total accidents imported: ${count}`);
   return count;
 }
 
@@ -491,33 +642,47 @@ async function importRequisitions(data: any[][]) {
   const headers = data[0].map((h: string) => h.toLowerCase().trim());
   console.log('Requisition headers:', headers);
   
-  const getCol = (name: string) => headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+  // Support multiple possible column names
+  const getCol = (names: string[]) => {
+    for (const name of names) {
+      const idx = headers.findIndex((h: string) => h.includes(name.toLowerCase()));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
   
-  const requesterIdx = getCol('requested_by');
-  const originIdx = getCol('departure');
-  const destIdx = getCol('destination');
-  const purposeIdx = getCol('purpose');
-  const travelDateIdx = getCol('travel_date');
-  const travelTimeIdx = getCol('travel_time');
-  const returnDateIdx = getCol('return_date');
-  const returnTimeIdx = getCol('return_time');
-  const passengersIdx = getCol('passengers');
-  const namesIdx = getCol('passenger_names');
-  const statusIdx = getCol('status');
+  const requesterIdx = getCol(['requested_by', 'requester', 'staff_no', 'employee_id', 'requester_id']);
+  const originIdx = getCol(['departure', 'origin', 'from', 'start_point', 'pickup']);
+  const destIdx = getCol(['destination', 'to', 'end_point', 'dropoff', 'drop_off']);
+  const purposeIdx = getCol(['purpose', 'reason', 'objective', 'for']);
+  const travelDateIdx = getCol(['travel_date', 'date', 'trip_date', 'departure_date']);
+  const travelTimeIdx = getCol(['travel_time', 'time', 'departure_time', 'start_time']);
+  const returnDateIdx = getCol(['return_date', 'back_date', 'end_date']);
+  const returnTimeIdx = getCol(['return_time', 'back_time', 'end_time']);
+  const passengersIdx = getCol(['passengers', 'num_passengers', 'pax', 'count', 'passenger_count']);
+  const namesIdx = getCol(['passenger_names', 'names', 'travellers', 'who', 'passenger_list']);
+  const statusIdx = getCol(['status', 'state', 'req_status']);
+
+  console.log('Requisitions column mappings:', { requesterIdx, travelDateIdx, originIdx, destIdx, purposeIdx });
 
   let count = 0;
   
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     
-    if (!row[0]) continue;
+    // Require at least purpose or destination to process
+    const hasData = (purposeIdx >= 0 && row[purposeIdx]) || (destIdx >= 0 && row[destIdx]) || row[0];
+    if (!hasData) {
+      console.log(`Row ${i}: Skipping - no requisition data`);
+      continue;
+    }
 
     try {
-      // Look up requester by staff_no
+      // Look up requester by staff_no or name
       let requesterId = null;
       const reqRef = requesterIdx >= 0 ? row[requesterIdx] : '';
       if (reqRef) {
-        const reqRes = await query('SELECT id FROM staff WHERE staff_no = $1', [reqRef]);
+        const reqRes = await query('SELECT id FROM staff WHERE staff_no = $1 OR staff_name = $1', [reqRef]);
         if (reqRes.length > 0) requesterId = reqRes[0].id;
       }
 
@@ -547,12 +712,13 @@ async function importRequisitions(data: any[][]) {
         statusIdx >= 0 ? row[statusIdx] : 'Draft'
       ]);
       count++;
+      console.log(`Row ${i}: Imported requisition ${reqNumber}`);
     } catch (e: any) {
       console.error('Requisition row error:', e.message, row);
     }
   }
   
-  console.log(`Imported ${count} requisitions`);
+  console.log(`Total requisitions imported: ${count}`);
   return count;
 }
 

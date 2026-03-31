@@ -4,26 +4,35 @@ const express_1 = require("express");
 const database_1 = require("../database");
 const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
-// Get all repairs
+// Get all repairs - with company filtering
 router.get('/', async (req, res) => {
     try {
-        const result = await (0, database_1.query)(`
+        const companyId = req.user?.companyId;
+        let sql = `
       SELECT r.*, v.registration_num, s.staff_name as driver_name
       FROM repairs r
       LEFT JOIN vehicles v ON v.id = r.vehicle_id
       LEFT JOIN staff s ON s.id = r.driver_id
-      ORDER BY r.date_in DESC
-    `);
+    `;
+        let params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' WHERE v.company_id = $1';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY r.date_in DESC';
+        const result = await (0, database_1.query)(sql, params);
         res.json(result);
     }
     catch (error) {
+        console.error('Get repairs error:', error);
         res.status(500).json({ error: 'Failed to fetch repairs' });
     }
 });
-// Get defective vehicles (from failed inspections)
+// Get defective vehicles - with company filtering
 router.get('/defective-vehicles', async (req, res) => {
     try {
-        const result = await (0, database_1.query)(`
+        const companyId = req.user?.companyId;
+        let sql = `
       SELECT 
         v.id,
         v.registration_num,
@@ -38,8 +47,14 @@ router.get('/defective-vehicles', async (req, res) => {
       LEFT JOIN job_cards jc ON jc.vehicle_id = v.id AND jc.status IN ('Pending', 'In Progress')
       LEFT JOIN staff s ON s.id = jc.reported_by
       WHERE v.status = 'Defective'
-      ORDER BY v.defect_reported_at DESC
-    `);
+    `;
+        let params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND v.company_id = $1';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY v.defect_reported_at DESC';
+        const result = await (0, database_1.query)(sql, params);
         res.json(result);
     }
     catch (error) {
@@ -47,10 +62,18 @@ router.get('/defective-vehicles', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch defective vehicles' });
     }
 });
-// Create repair record
+// Create repair record - with company verification
 router.post('/', async (req, res) => {
     const { date_in, vehicle_id, preventative_maintenance, breakdown_description, odometer_reading, driver_id, assigned_technician, repairs_start_time, target_repair_hours, garage_name, cost } = req.body;
+    const companyId = req.user?.companyId;
     try {
+        // Verify vehicle belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const vehicleCheck = await (0, database_1.query)('SELECT company_id FROM vehicles WHERE id = $1', [vehicle_id]);
+            if (vehicleCheck.length === 0 || vehicleCheck[0].company_id !== companyId) {
+                return res.status(403).json({ error: 'Vehicle does not belong to your company' });
+            }
+        }
         const id = (0, uuid_1.v4)();
         await (0, database_1.query)(`
       INSERT INTO repairs (
@@ -72,14 +95,27 @@ router.post('/', async (req, res) => {
         res.status(201).json(result[0]);
     }
     catch (error) {
+        console.error('Create repair error:', error);
         res.status(500).json({ error: 'Failed to create repair record' });
     }
 });
-// Complete repair
+// Complete repair - with company verification
 router.put('/:id/complete', async (req, res) => {
     const { id } = req.params;
     const { date_out, repairs_end_time, actual_repair_hours } = req.body;
+    const companyId = req.user?.companyId;
     try {
+        // Verify repair belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const repairCheck = await (0, database_1.query)(`
+        SELECT r.vehicle_id FROM repairs r
+        JOIN vehicles v ON v.id = r.vehicle_id
+        WHERE r.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (repairCheck.length === 0) {
+                return res.status(403).json({ error: 'Repair not found or not in your company' });
+            }
+        }
         // Get target hours and vehicle_id
         const repairData = await (0, database_1.query)('SELECT target_repair_hours, vehicle_id FROM repairs WHERE id = $1', [id]);
         const target = repairData[0]?.target_repair_hours;
@@ -105,14 +141,16 @@ router.put('/:id/complete', async (req, res) => {
         res.json(result[0]);
     }
     catch (error) {
+        console.error('Complete repair error:', error);
         res.status(500).json({ error: 'Failed to complete repair' });
     }
 });
 // ========== JOB CARDS ==========
-// Get all job cards
+// Get all job cards - with company filtering
 router.get('/job-cards', async (req, res) => {
     try {
-        const result = await (0, database_1.query)(`
+        const companyId = req.user?.companyId;
+        let sql = `
       SELECT 
         jc.*,
         v.registration_num,
@@ -125,8 +163,14 @@ router.get('/job-cards', async (req, res) => {
       LEFT JOIN staff r ON r.id = jc.reported_by
       LEFT JOIN staff a ON a.id = jc.approved_by
       LEFT JOIN staff t ON t.id = jc.assigned_technician
-      ORDER BY jc.created_at DESC
-    `);
+    `;
+        let params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' WHERE v.company_id = $1';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY jc.created_at DESC';
+        const result = await (0, database_1.query)(sql, params);
         res.json(result);
     }
     catch (error) {
@@ -134,11 +178,12 @@ router.get('/job-cards', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch job cards' });
     }
 });
-// Get single job card
+// Get single job card - with company verification
 router.get('/job-cards/:id', async (req, res) => {
     const { id } = req.params;
+    const companyId = req.user?.companyId;
     try {
-        const result = await (0, database_1.query)(`
+        let sql = `
       SELECT 
         jc.*,
         v.registration_num,
@@ -153,7 +198,13 @@ router.get('/job-cards/:id', async (req, res) => {
       LEFT JOIN staff a ON a.id = jc.approved_by
       LEFT JOIN staff t ON t.id = jc.assigned_technician
       WHERE jc.id = $1
-    `, [id]);
+    `;
+        let params = [id];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND v.company_id = $2';
+            params.push(companyId);
+        }
+        const result = await (0, database_1.query)(sql, params);
         if (result.length === 0) {
             return res.status(404).json({ error: 'Job card not found' });
         }
@@ -164,14 +215,22 @@ router.get('/job-cards/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch job card' });
     }
 });
-// Create job card from defect
+// Create job card from defect - with company verification
 router.post('/job-cards', async (req, res) => {
     const { vehicle_id, defect_description, repair_type, service_provider, priority = 'Medium', estimated_cost } = req.body;
     const reported_by = req.user?.staffId;
+    const companyId = req.user?.companyId;
     if (!vehicle_id || !defect_description) {
         return res.status(400).json({ error: 'Vehicle and defect description are required' });
     }
     try {
+        // Verify vehicle belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const vehicleCheck = await (0, database_1.query)('SELECT company_id FROM vehicles WHERE id = $1', [vehicle_id]);
+            if (vehicleCheck.length === 0 || vehicleCheck[0].company_id !== companyId) {
+                return res.status(403).json({ error: 'Vehicle does not belong to your company' });
+            }
+        }
         // Generate unique job card number
         const year = new Date().getFullYear();
         const randomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -209,16 +268,28 @@ router.post('/job-cards', async (req, res) => {
         res.status(500).json({ error: 'Failed to create job card: ' + error.message });
     }
 });
-// Approve job card (manager)
+// Approve job card (manager) - with company verification
 router.post('/job-cards/:id/approve', async (req, res) => {
     const { id } = req.params;
     const approved_by = req.user?.staffId;
     const userRole = req.user?.role;
+    const companyId = req.user?.companyId;
     // Only managers can approve
     if (!['admin', 'manager', 'transport_supervisor'].includes(userRole)) {
         return res.status(403).json({ error: 'Only managers can approve job cards' });
     }
     try {
+        // Verify job card belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const jcCheck = await (0, database_1.query)(`
+        SELECT jc.id FROM job_cards jc
+        JOIN vehicles v ON v.id = jc.vehicle_id
+        WHERE jc.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (jcCheck.length === 0) {
+                return res.status(403).json({ error: 'Job card not found or not in your company' });
+            }
+        }
         await (0, database_1.query)(`
       UPDATE job_cards 
       SET status = 'Approved', 
@@ -242,11 +313,23 @@ router.post('/job-cards/:id/approve', async (req, res) => {
         res.status(500).json({ error: 'Failed to approve job card' });
     }
 });
-// Assign technician and start work
+// Assign technician and start work - with company verification
 router.post('/job-cards/:id/assign', async (req, res) => {
     const { id } = req.params;
     const { assigned_technician, target_hours } = req.body;
+    const companyId = req.user?.companyId;
     try {
+        // Verify job card belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const jcCheck = await (0, database_1.query)(`
+        SELECT jc.id FROM job_cards jc
+        JOIN vehicles v ON v.id = jc.vehicle_id
+        WHERE jc.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (jcCheck.length === 0) {
+                return res.status(403).json({ error: 'Job card not found or not in your company' });
+            }
+        }
         await (0, database_1.query)(`
       UPDATE job_cards 
       SET assigned_technician = $1,
@@ -263,11 +346,23 @@ router.post('/job-cards/:id/assign', async (req, res) => {
         res.status(500).json({ error: 'Failed to assign technician' });
     }
 });
-// Complete job card
+// Complete job card - with company verification
 router.post('/job-cards/:id/complete', async (req, res) => {
     const { id } = req.params;
     const { actual_hours, actual_cost, repair_notes } = req.body;
+    const companyId = req.user?.companyId;
     try {
+        // Verify job card belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const jcCheck = await (0, database_1.query)(`
+        SELECT jc.id, jc.vehicle_id FROM job_cards jc
+        JOIN vehicles v ON v.id = jc.vehicle_id
+        WHERE jc.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (jcCheck.length === 0) {
+                return res.status(403).json({ error: 'Job card not found or not in your company' });
+            }
+        }
         const jobCardResult = await (0, database_1.query)('SELECT * FROM job_cards WHERE id = $1', [id]);
         if (jobCardResult.length === 0) {
             return res.status(404).json({ error: 'Job card not found' });
@@ -299,11 +394,23 @@ router.post('/job-cards/:id/complete', async (req, res) => {
         res.status(500).json({ error: 'Failed to complete job card' });
     }
 });
-// Cancel job card
+// Cancel job card - with company verification
 router.post('/job-cards/:id/cancel', async (req, res) => {
     const { id } = req.params;
     const { cancellation_reason } = req.body;
+    const companyId = req.user?.companyId;
     try {
+        // Verify job card belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const jcCheck = await (0, database_1.query)(`
+        SELECT jc.id, jc.vehicle_id FROM job_cards jc
+        JOIN vehicles v ON v.id = jc.vehicle_id
+        WHERE jc.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (jcCheck.length === 0) {
+                return res.status(403).json({ error: 'Job card not found or not in your company' });
+            }
+        }
         const jobCardResult = await (0, database_1.query)('SELECT * FROM job_cards WHERE id = $1', [id]);
         if (jobCardResult.length === 0) {
             return res.status(404).json({ error: 'Job card not found' });
@@ -338,10 +445,22 @@ router.post('/job-cards/:id/cancel', async (req, res) => {
         res.status(500).json({ error: 'Failed to cancel job card' });
     }
 });
-// Convert job card to repair record
+// Convert job card to repair record - with company verification
 router.post('/job-cards/:id/convert-to-repair', async (req, res) => {
     const { id } = req.params;
+    const companyId = req.user?.companyId;
     try {
+        // Verify job card belongs to user's company
+        if (companyId && companyId !== 'super_admin') {
+            const jcCheck = await (0, database_1.query)(`
+        SELECT jc.id FROM job_cards jc
+        JOIN vehicles v ON v.id = jc.vehicle_id
+        WHERE jc.id = $1 AND v.company_id = $2
+      `, [id, companyId]);
+            if (jcCheck.length === 0) {
+                return res.status(403).json({ error: 'Job card not found or not in your company' });
+            }
+        }
         const jobCardResult = await (0, database_1.query)(`
       SELECT jc.*, v.registration_num
       FROM job_cards jc

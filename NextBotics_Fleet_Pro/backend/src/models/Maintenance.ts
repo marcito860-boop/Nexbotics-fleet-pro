@@ -901,19 +901,20 @@ export class MaintenanceScheduleModel {
 
     const rows = await query(
       `INSERT INTO maintenance_schedules (
-        company_id, vehicle_id, schedule_type, service_type, service_name, description,
+        company_id, vehicle_id, schedule_type, service_type, service_name, title, description,
         interval_mileage, last_service_mileage, next_service_km,
         interval_months, last_service_date, next_service_date,
         estimated_cost, estimated_duration_hours, assigned_provider_id,
         reminder_days_before, reminder_mileage_before, priority
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *`,
       [
         companyId,
         input.vehicleId,
         input.scheduleType,
         input.serviceType,
-        input.title,
+        input.title,  // service_name
+        input.title,  // title
         input.description || null,
         input.intervalMileage || null,
         input.lastServiceMileage || 0,
@@ -959,6 +960,12 @@ export class MaintenanceScheduleModel {
         updates.push(`${fieldMap[key]} = $${params.length + 1}`);
         params.push(value);
       }
+    }
+
+    // Keep service_name in sync with title when title is updated
+    if (input.title !== undefined) {
+      updates.push(`service_name = $${params.length + 1}`);
+      params.push(input.title);
     }
 
     if (updates.length === 0) return this.findById(id, companyId);

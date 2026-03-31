@@ -55,7 +55,7 @@ exports.rateLimiter = rateLimiter;
 // Stricter rate limiter for auth endpoints
 exports.authRateLimiter = (0, exports.rateLimiter)({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 5, // 5 attempts per 15 minutes
+    maxRequests: 20, // 20 attempts per 15 minutes
     message: 'Too many authentication attempts, please try again later'
 });
 // API key rate limiter (higher limits)

@@ -8,23 +8,112 @@ const database_1 = require("../database");
 const uuid_1 = require("uuid");
 const email_1 = __importDefault(require("../services/email"));
 const router = (0, express_1.Router)();
-// Create requisition request
+// Helper to wrap responses
+const successResponse = (data, message) => ({ success: true, data, message });
+const errorResponse = (error, details) => ({ success: false, error, details });
+// ==================== REQUISITION ROUTES ====================
+// Create requisition request - with company filtering
 router.post('/', async (req, res) => {
-    const { requested_by, place_of_departure, destination, purpose, travel_date, travel_time, return_date, return_time, num_passengers, passenger_names } = req.body;
+    const companyId = req.user?.companyId;
+    // Support both old and new field names
+    const { requested_by, requestBy, staffId, place_of_departure, placeOfDeparture, fromLocation, destination, toLocation, purpose, travel_date, travelDate, requiredFrom, travel_time, travelTime, return_date, returnDate, requiredUntil, return_time, returnTime, num_passengers, numPassengers, numberOfPassengers, passenger_names, passengerNames, priority = 'normal', notes } = req.body;
+    // Normalize field names
+    const normalizedData = {
+        requested_by: requested_by || requestBy || staffId,
+        place_of_departure: place_of_departure || placeOfDeparture || fromLocation || '',
+        destination: destination || toLocation || '',
+        purpose: purpose || '',
+        travel_date: travel_date || travelDate || requiredFrom,
+        travel_time: travel_time || travelTime || '09:00',
+        return_date: return_date || returnDate || requiredUntil || null,
+        return_time: return_time || returnTime || null,
+        num_passengers: num_passengers || numPassengers || numberOfPassengers || 1,
+        passenger_names: passenger_names || passengerNames || '',
+        priority,
+        notes: notes || ''
+    };
+    // If requested_by not provided, try to find staff by user's email
+    let requesterId = normalizedData.requested_by;
+    let staffEmail = null;
+    let staffCreationError = null;
+    try {
+        if (!requesterId && req.user?.email) {
+            // Find staff by email and company
+            const staffByEmail = await (0, database_1.query)('SELECT id, staff_name, email, department FROM staff WHERE email = $1 AND (company_id = $2 OR $2 IS NULL OR $2 = \'super_admin\')', [req.user.email, companyId]);
+            if (staffByEmail && staffByEmail.length > 0) {
+                requesterId = staffByEmail[0].id;
+                staffEmail = staffByEmail[0].email;
+            }
+        }
+        // If still no requester, create a default staff record for this user
+        if (!requesterId && req.user) {
+            const staffName = req.user.firstName && req.user.lastName
+                ? `${req.user.firstName} ${req.user.lastName}`
+                : req.user.email.split('@')[0];
+            console.log('Auto-creating staff for user:', {
+                userId: req.user.userId,
+                email: req.user.email,
+                companyId,
+                staffName
+            });
+            try {
+                // Try to find existing staff first (same company)
+                const existingStaff = await (0, database_1.query)('SELECT id FROM staff WHERE email = $1 AND (company_id = $2 OR $2 IS NULL OR $2 = \'super_admin\')', [req.user.email, companyId]);
+                if (existingStaff && existingStaff.length > 0) {
+                    // Use existing staff
+                    requesterId = existingStaff[0].id;
+                    staffEmail = req.user.email;
+                    console.log('Using existing staff record:', { staffId: requesterId });
+                }
+                else {
+                    // Create new staff with company_id
+                    const newStaffId = (0, uuid_1.v4)();
+                    await (0, database_1.query)(`
+            INSERT INTO staff (id, staff_name, email, role, department, company_id)
+            VALUES ($1, $2, $3, 'Staff', 'General', $4)
+          `, [newStaffId, staffName, req.user.email, companyId]);
+                    requesterId = newStaffId;
+                    staffEmail = req.user.email;
+                    console.log('Staff auto-created successfully:', { staffId: newStaffId });
+                }
+            }
+            catch (insertErr) {
+                console.error('Failed to auto-create staff:', insertErr);
+                staffCreationError = insertErr.message;
+            }
+        }
+    }
+    catch (err) {
+        console.error('Error finding/creating staff:', err);
+        staffCreationError = err.message;
+    }
     // Validation
-    if (!requested_by || !place_of_departure || !destination || !purpose || !travel_date || !travel_time) {
-        return res.status(400).json({
-            error: 'Missing required fields',
-            fields: { requested_by, place_of_departure, destination, purpose, travel_date, travel_time }
-        });
+    if (!requesterId || !normalizedData.place_of_departure || !normalizedData.destination ||
+        !normalizedData.purpose || !normalizedData.travel_date) {
+        return res.status(400).json(errorResponse('Missing required fields', {
+            fields: ['requested_by', 'place_of_departure', 'destination', 'purpose', 'travel_date'],
+            received: {
+                hasRequesterId: !!requesterId,
+                hasDeparture: !!normalizedData.place_of_departure,
+                hasDestination: !!normalizedData.destination,
+                hasPurpose: !!normalizedData.purpose,
+                hasTravelDate: !!normalizedData.travel_date,
+                user: req.user ? { id: req.user.userId, email: req.user.email, companyId } : null,
+                staffCreationError
+            }
+        }));
     }
     try {
-        // Check if staff has email
-        const staffCheck = await (0, database_1.query)('SELECT staff_name, email, department FROM staff WHERE id = $1', [requested_by]);
+        // Check if staff has email and belongs to same company
+        const staffCheck = await (0, database_1.query)('SELECT staff_name, email, department, company_id FROM staff WHERE id = $1', [requesterId]);
         if (!staffCheck || staffCheck.length === 0) {
-            return res.status(400).json({ error: 'Staff not found' });
+            return res.status(400).json(errorResponse('Staff not found', { staffId: requesterId }));
         }
         const staff = staffCheck[0];
+        // Verify staff belongs to user's company (unless super_admin)
+        if (companyId && companyId !== 'super_admin' && staff.company_id && staff.company_id !== companyId) {
+            return res.status(403).json(errorResponse('Staff does not belong to your company'));
+        }
         if (!staff.email) {
             return res.status(400).json({
                 error: 'Staff has no email address',
@@ -40,236 +129,324 @@ router.post('/', async (req, res) => {
       INSERT INTO requisitions (
         id, request_no, requested_by, place_of_departure, destination, purpose,
         travel_date, travel_time, return_date, return_time, num_passengers, passenger_names,
-        status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', CURRENT_TIMESTAMP)
+        status, created_at, priority, notes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending', CURRENT_TIMESTAMP, $13, $14)
     `, [
-            id, requestNo, requested_by, place_of_departure, destination, purpose,
-            travel_date, travel_time, return_date || null, return_time || null,
-            num_passengers || 1, passenger_names || ''
+            id, requestNo, requesterId, normalizedData.place_of_departure,
+            normalizedData.destination, normalizedData.purpose,
+            normalizedData.travel_date, normalizedData.travel_time,
+            normalizedData.return_date, normalizedData.return_time,
+            normalizedData.num_passengers, normalizedData.passenger_names,
+            normalizedData.priority, normalizedData.notes
         ]);
-        // Get the created requisition
-        const result = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        // Send email notification - non-blocking (fire and forget)
+        // Get the created requisition with joins
+        const result = await (0, database_1.query)(`
+      SELECT r.*, s.staff_name as requester_name, s.email as requester_email, s.department
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `, [id]);
+        // Send email notification - non-blocking
         email_1.default.sendRequisitionRequest(staff.staff_name, req.body)
             .then(() => console.log('Requisition email sent'))
             .catch((err) => console.error('Email failed (non-blocking):', err));
-        res.status(201).json(result[0]);
+        res.status(201).json(successResponse(result[0], 'Requisition created successfully'));
     }
     catch (error) {
         console.error('Create requisition error:', error);
-        res.status(500).json({ error: 'Failed to create requisition' });
+        res.status(500).json(errorResponse('Failed to create requisition: ' + error.message));
     }
 });
-// Get my requisitions
-router.get('/my-requests', async (req, res) => {
-    // Use staffId if available (for job roles), otherwise fall back to userId
-    const staffId = req.user?.staffId || req.user?.userId;
-    const userEmail = req.user?.email;
-    try {
-        // For managers/admins without staff records: show all requests they created OR all requests
-        const isManager = ['admin', 'manager'].includes(req.user?.role);
-        let result;
-        if (isManager && !req.user?.staffId) {
-            // Manager without staff record - show ALL requests
-            result = await (0, database_1.query)(`
-        SELECT r.*, 
-          s.staff_name as requester_name, 
-          d.staff_name as driver_name,
-          v.registration_num
-        FROM requisitions r
-        JOIN staff s ON r.requested_by = s.id
-        LEFT JOIN staff d ON r.driver_id = d.id
-        LEFT JOIN vehicles v ON r.vehicle_id = v.id
-        ORDER BY r.created_at DESC
-      `);
-        }
-        else {
-            // Staff member - show only their requests
-            result = await (0, database_1.query)(`
-        SELECT r.*, 
-          s.staff_name as requester_name, 
-          d.staff_name as driver_name,
-          v.registration_num
-        FROM requisitions r
-        JOIN staff s ON r.requested_by = s.id
-        LEFT JOIN staff d ON r.driver_id = d.id
-        LEFT JOIN vehicles v ON r.vehicle_id = v.id
-        WHERE r.requested_by = $1
-        ORDER BY r.created_at DESC
-      `, [staffId]);
-        }
-        res.json(result);
-    }
-    catch (error) {
-        console.error('Get my requests error:', error);
-        res.status(500).json({ error: 'Failed to fetch requests' });
-    }
-});
-// Get all requisitions (for managers) - with optional status filter
+// Get all requisitions - with company filtering
 router.get('/', async (req, res) => {
     try {
-        const status = req.query?.status;
+        const { status, myRequests, page = 1, perPage = 20 } = req.query;
+        const companyId = req.user?.companyId;
+        const userId = req.user?.userId;
+        const staffId = req.user?.staffId;
+        const userRole = req.user?.role;
+        const isManager = ['admin', 'manager'].includes(userRole);
         let queryStr = `
-      SELECT r.*, s.staff_name, s.email, s.department,
+      SELECT r.*, 
+        s.staff_name as requester_name, s.email as requester_email, s.department,
         d.staff_name as driver_name,
-        v.registration_num
+        v.registration_num,
+        approver.staff_name as approver_name,
+        allocator.staff_name as allocator_name
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN staff d ON r.driver_id = d.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff approver ON r.approved_by = approver.id
+      LEFT JOIN staff allocator ON r.allocated_by = allocator.id
     `;
         let params = [];
+        let paramIndex = 1;
+        // Company filtering
+        if (companyId && companyId !== 'super_admin') {
+            queryStr += ` WHERE s.company_id = $${paramIndex}`;
+            params.push(companyId);
+            paramIndex++;
+        }
+        else {
+            queryStr += ' WHERE 1=1';
+        }
+        // Status filter
         if (status) {
-            queryStr += ` WHERE r.status = $1`;
+            queryStr += ` AND r.status = $${paramIndex}`;
             params.push(status);
+            paramIndex++;
+        }
+        // My requests filter (for non-managers)
+        if (myRequests === 'true' || (!isManager && !status)) {
+            queryStr += ` AND r.requested_by = $${paramIndex}`;
+            params.push(staffId || userId);
+            paramIndex++;
         }
         queryStr += ` ORDER BY r.created_at DESC`;
+        // Pagination
+        const offset = (parseInt(page) - 1) * parseInt(perPage);
+        queryStr += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        params.push(parseInt(perPage), offset);
         const result = await (0, database_1.query)(queryStr, params);
-        res.json(result);
+        // Get total count with company filtering
+        let countQuery = `SELECT COUNT(*) as total FROM requisitions r JOIN staff s ON r.requested_by = s.id`;
+        let countParams = [];
+        if (companyId && companyId !== 'super_admin') {
+            countQuery += ' WHERE s.company_id = $1';
+            countParams.push(companyId);
+        }
+        else {
+            countQuery += ' WHERE 1=1';
+        }
+        if (status) {
+            countQuery += countParams.length > 0 ? ` AND r.status = $${countParams.length + 1}` : ` AND r.status = $1`;
+            countParams.push(status);
+        }
+        if (myRequests === 'true' || (!isManager && !status)) {
+            countQuery += countParams.length > 0 ? ` AND r.requested_by = $${countParams.length + 1}` : ` AND r.requested_by = $1`;
+            countParams.push(staffId || userId);
+        }
+        const countResult = await (0, database_1.query)(countQuery, countParams);
+        // Format response to match frontend expectations
+        const formattedItems = result.map((r) => ({
+            id: r.id,
+            requestNumber: r.request_no,
+            request_no: r.request_no,
+            purpose: r.purpose,
+            status: r.status,
+            priority: r.priority || 'normal',
+            requiredFrom: r.travel_date,
+            travel_date: r.travel_date,
+            requiredUntil: r.return_date,
+            return_date: r.return_date,
+            fromLocation: r.place_of_departure,
+            place_of_departure: r.place_of_departure,
+            toLocation: r.destination,
+            destination: r.destination,
+            numberOfPassengers: r.num_passengers,
+            num_passengers: r.num_passengers,
+            notes: r.notes,
+            createdAt: r.created_at,
+            created_at: r.created_at,
+            requester: {
+                id: r.requested_by,
+                firstName: r.requester_name?.split(' ')[0] || '',
+                lastName: r.requester_name?.split(' ').slice(1).join(' ') || '',
+                staff_name: r.requester_name,
+                email: r.requester_email,
+                department: r.department
+            },
+            allocatedVehicle: r.registration_num ? {
+                id: r.vehicle_id,
+                registrationNumber: r.registration_num,
+                registration_num: r.registration_num
+            } : null,
+            driver: r.driver_name ? {
+                id: r.driver_id,
+                name: r.driver_name
+            } : null
+        }));
+        res.json(successResponse({
+            items: formattedItems,
+            total: parseInt(countResult[0]?.total || 0),
+            page: parseInt(page),
+            perPage: parseInt(perPage)
+        }));
     }
     catch (error) {
         console.error('Get requisitions error:', error);
-        res.status(500).json({ error: 'Failed to fetch requisitions' });
+        res.status(500).json(errorResponse('Failed to fetch requisitions: ' + error.message));
     }
 });
-// Get pending approvals (for departmental approvers)
-router.get('/pending-approvals', async (req, res) => {
-    const userDept = req.user?.department;
-    const userRole = req.user?.role;
-    const isManager = ['admin', 'manager'].includes(userRole);
+// Get single requisition - with company verification
+router.get('/:id', async (req, res) => {
     try {
-        let result;
-        if (isManager) {
-            // Managers see ALL pending requests (no department filter)
-            result = await (0, database_1.query)(`
-        SELECT r.*, s.staff_name, s.email, s.department
-        FROM requisitions r
-        JOIN staff s ON r.requested_by = s.id
-        WHERE r.status = 'pending'
-        ORDER BY r.created_at DESC
-      `);
-        }
-        else {
-            // HODs and others see only their department's pending requests
-            result = await (0, database_1.query)(`
-        SELECT r.*, s.staff_name, s.email, s.department
-        FROM requisitions r
-        JOIN staff s ON r.requested_by = s.id
-        WHERE r.status = 'pending' AND s.department = $1
-        ORDER BY r.created_at DESC
-      `, [userDept]);
-        }
-        res.json(result);
-    }
-    catch (error) {
-        console.error('Get pending approvals error:', error);
-        res.status(500).json({ error: 'Failed to fetch pending approvals' });
-    }
-});
-// Get pending allocations (approved but not yet allocated)
-router.get('/pending-allocations', async (req, res) => {
-    try {
-        const result = await (0, database_1.query)(`
-      SELECT r.*, s.staff_name as requester_name, s.department
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      WHERE r.status = 'approved' AND r.vehicle_id IS NULL
-      ORDER BY r.created_at DESC
-    `);
-        res.json(result);
-    }
-    catch (error) {
-        console.error('Get pending allocations error:', error);
-        res.status(500).json({ error: 'Failed to fetch pending allocations' });
-    }
-});
-// Get my assignments (for drivers)
-router.get('/my-assignments', async (req, res) => {
-    const staffId = req.user?.staffId;
-    if (!staffId) {
-        return res.status(400).json({ error: 'No staff record linked to your account' });
-    }
-    try {
-        const result = await (0, database_1.query)(`
+        const { id } = req.params;
+        const companyId = req.user?.companyId;
+        let sql = `
       SELECT r.*, 
-        s.staff_name as requester_name,
-        v.registration_num, v.make_model
+        s.staff_name as requester_name, s.email as requester_email, s.department,
+        d.staff_name as driver_name, d.phone as driver_phone,
+        v.registration_num, v.make_model,
+        approver.staff_name as approver_name,
+        allocator.staff_name as allocator_name
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN staff d ON r.driver_id = d.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.driver_id = $1
-      ORDER BY r.travel_date DESC
-    `, [staffId]);
-        res.json(result);
+      LEFT JOIN staff approver ON r.approved_by = approver.id
+      LEFT JOIN staff allocator ON r.allocated_by = allocator.id
+      WHERE r.id = $1
+    `;
+        let params = [id];
+        // Company verification
+        if (companyId && companyId !== 'super_admin') {
+            sql += ` AND s.company_id = $2`;
+            params.push(companyId);
+        }
+        const result = await (0, database_1.query)(sql, params);
+        if (result.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        res.json(successResponse(result[0]));
     }
     catch (error) {
-        console.error('Get my assignments error:', error);
-        res.status(500).json({ error: 'Failed to fetch assignments' });
+        console.error('Get requisition error:', error);
+        res.status(500).json(errorResponse('Failed to fetch requisition: ' + error.message));
     }
 });
-// Approve/Reject requisition
+// Approve requisition - with company verification
 router.post('/:id/approve', async (req, res) => {
     const { id } = req.params;
-    const { status, reason } = req.body;
-    const userId = req.user?.userId;
+    const { notes, reason } = req.body;
     const staffId = req.user?.staffId;
-    console.log('Approve request:', { id, status, userId, staffId, user: req.user });
-    if (!userId) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
+    const companyId = req.user?.companyId;
     try {
-        // First check if requisition exists and is pending
-        const checkResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
+        // First check if requisition exists and belongs to company
+        let checkSql = 'SELECT * FROM requisitions r JOIN staff s ON r.requested_by = s.id WHERE r.id = $1';
+        let checkParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            checkSql += ' AND s.company_id = $2';
+            checkParams.push(companyId);
+        }
+        const checkResult = await (0, database_1.query)(checkSql, checkParams);
         if (checkResult.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
+            return res.status(404).json(errorResponse('Requisition not found'));
         }
         if (checkResult[0].status !== 'pending') {
-            return res.status(400).json({ error: 'Requisition is not pending' });
+            return res.status(400).json(errorResponse('Requisition is not pending'));
         }
-        // Use staffId if available (for staff users), otherwise use NULL
-        const approverId = staffId || null;
         await (0, database_1.query)(`
       UPDATE requisitions 
-      SET status = $1, approved_by = $2, approved_at = CURRENT_TIMESTAMP, approval_reason = $3
-      WHERE id = $4
-    `, [status, approverId, reason || '', id]);
-        // Get requisition details for notification
+      SET status = 'approved', approved_by = $1, approved_at = CURRENT_TIMESTAMP, approval_reason = $2
+      WHERE id = $3
+    `, [staffId || null, notes || reason || '', id]);
+        // Get updated requisition
         const result = await (0, database_1.query)(`
-      SELECT r.*, s.staff_name 
+      SELECT r.*, s.staff_name as requester_name
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `, [id]);
+        // Send email notification
+        if (result.length > 0) {
+            email_1.default.sendApprovalNotification(result[0].requester_name, 'approved', notes || reason)
+                .catch((err) => console.error('Email failed:', err));
+        }
+        res.json(successResponse(result[0], 'Requisition approved'));
+    }
+    catch (error) {
+        console.error('Approve requisition error:', error);
+        res.status(500).json(errorResponse('Failed to approve requisition: ' + error.message));
+    }
+});
+// Reject requisition - with company verification
+router.post('/:id/reject', async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const staffId = req.user?.staffId;
+    const companyId = req.user?.companyId;
+    if (!reason) {
+        return res.status(400).json(errorResponse('Rejection reason is required'));
+    }
+    try {
+        let checkSql = 'SELECT * FROM requisitions r JOIN staff s ON r.requested_by = s.id WHERE r.id = $1';
+        let checkParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            checkSql += ' AND s.company_id = $2';
+            checkParams.push(companyId);
+        }
+        const checkResult = await (0, database_1.query)(checkSql, checkParams);
+        if (checkResult.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        if (checkResult[0].status !== 'pending') {
+            return res.status(400).json(errorResponse('Requisition is not pending'));
+        }
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET status = 'rejected', approved_by = $1, approved_at = CURRENT_TIMESTAMP, approval_reason = $2
+      WHERE id = $3
+    `, [staffId || null, reason, id]);
+        const result = await (0, database_1.query)(`
+      SELECT r.*, s.staff_name as requester_name
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
       WHERE r.id = $1
     `, [id]);
         if (result.length > 0) {
-            email_1.default.sendApprovalNotification(result[0].staff_name, status, reason)
+            email_1.default.sendApprovalNotification(result[0].requester_name, 'rejected', reason)
                 .catch((err) => console.error('Email failed:', err));
         }
-        res.json({ message: `Requisition ${status}`, requisition: result[0] });
+        res.json(successResponse(result[0], 'Requisition rejected'));
     }
     catch (error) {
-        console.error('Approve requisition error:', error);
-        res.status(500).json({ error: 'Failed to update requisition: ' + (error.message || 'Unknown error') });
+        console.error('Reject requisition error:', error);
+        res.status(500).json(errorResponse('Failed to reject requisition: ' + error.message));
     }
 });
-// Allocate vehicle and driver (Transport Supervisor)
+// Allocate vehicle and driver - with company verification
 router.post('/:id/allocate', async (req, res) => {
     const { id } = req.params;
-    const { vehicle_id, driver_id } = req.body;
-    const userId = req.user?.userId;
+    const { vehicleId, driverId, vehicle_id, driver_id } = req.body;
     const staffId = req.user?.staffId;
-    console.log('Allocate request:', { id, vehicle_id, driver_id, userId, staffId });
-    if (!vehicle_id || !driver_id) {
-        return res.status(400).json({ error: 'Vehicle and driver are required' });
+    const companyId = req.user?.companyId;
+    const vId = vehicleId || vehicle_id;
+    const dId = driverId || driver_id;
+    if (!vId || !dId) {
+        return res.status(400).json(errorResponse('Vehicle and driver are required'));
     }
     try {
-        // Use staffId if available, otherwise NULL
-        const allocatedBy = staffId || null;
+        // Verify vehicle belongs to company
+        if (companyId && companyId !== 'super_admin') {
+            const vehicleCheck = await (0, database_1.query)('SELECT company_id FROM vehicles WHERE id = $1', [vId]);
+            if (vehicleCheck.length === 0 || vehicleCheck[0].company_id !== companyId) {
+                return res.status(403).json(errorResponse('Vehicle does not belong to your company'));
+            }
+            // Verify driver belongs to company
+            const driverCheck = await (0, database_1.query)('SELECT company_id FROM staff WHERE id = $1', [dId]);
+            if (driverCheck.length === 0 || driverCheck[0].company_id !== companyId) {
+                return res.status(403).json(errorResponse('Driver does not belong to your company'));
+            }
+        }
+        // Verify requisition belongs to company
+        let reqCheckSql = 'SELECT r.* FROM requisitions r JOIN staff s ON r.requested_by = s.id WHERE r.id = $1';
+        let reqCheckParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqCheckSql += ' AND s.company_id = $2';
+            reqCheckParams.push(companyId);
+        }
+        const reqCheck = await (0, database_1.query)(reqCheckSql, reqCheckParams);
+        if (reqCheck.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
         await (0, database_1.query)(`
       UPDATE requisitions 
       SET vehicle_id = $1, driver_id = $2, allocated_by = $3, allocated_at = CURRENT_TIMESTAMP, status = 'allocated'
       WHERE id = $4
-    `, [vehicle_id, driver_id, allocatedBy, id]);
-        // Get details for notification
+    `, [vId, dId, staffId || null, id]);
+        // Get details for response
         const result = await (0, database_1.query)(`
       SELECT r.*, s.staff_name, v.registration_num, d.staff_name as driver_name
       FROM requisitions r
@@ -281,22 +458,394 @@ router.post('/:id/allocate', async (req, res) => {
         if (result.length > 0) {
             email_1.default.sendVehicleAllocated(result[0].staff_name, result[0].registration_num, result[0].driver_name).catch((err) => console.error('Email failed:', err));
         }
-        res.json({ message: 'Vehicle allocated', requisition: result[0] });
+        res.json(successResponse(result[0], 'Vehicle allocated'));
     }
     catch (error) {
         console.error('Allocate vehicle error:', error);
-        res.status(500).json({ error: 'Failed to allocate vehicle: ' + (error.message || 'Unknown error') });
+        res.status(500).json(errorResponse('Failed to allocate vehicle: ' + error.message));
     }
 });
-// Submit driver inspection - FLAG VEHICLE AS DEFECTIVE ON FAILURE
+// Start trip - with company verification
+router.post('/:id/start', async (req, res) => {
+    const { id } = req.params;
+    const { startingOdometer, startOdometer } = req.body;
+    const companyId = req.user?.companyId;
+    const startOdo = startingOdometer || startOdometer;
+    console.log('Start trip request:', { id, startOdo, body: req.body });
+    try {
+        // Verify requisition belongs to company
+        let reqCheckSql = `
+      SELECT r.* FROM requisitions r 
+      JOIN staff s ON r.requested_by = s.id 
+      WHERE r.id = $1
+    `;
+        let reqCheckParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqCheckSql += ' AND s.company_id = $2';
+            reqCheckParams.push(companyId);
+        }
+        const reqCheck = await (0, database_1.query)(reqCheckSql, reqCheckParams);
+        if (reqCheck.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        // Get vehicle's current mileage if no starting odometer provided
+        let initialOdo = startOdo;
+        if (!initialOdo && reqCheck[0].vehicle_id) {
+            const vehicleData = await (0, database_1.query)('SELECT current_mileage FROM vehicles WHERE id = $1', [reqCheck[0].vehicle_id]);
+            if (vehicleData.length > 0) {
+                initialOdo = vehicleData[0].current_mileage;
+                console.log('Using vehicle current mileage as starting odometer:', initialOdo);
+            }
+        }
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET status = 'in_progress', departed_at = CURRENT_TIMESTAMP, starting_odometer = $1
+      WHERE id = $2 AND status = 'allocated'
+    `, [initialOdo || null, id]);
+        const result = await (0, database_1.query)(`
+      SELECT r.*, v.registration_num 
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.id = $1
+    `, [id]);
+        res.json(successResponse(result[0], 'Trip started'));
+    }
+    catch (error) {
+        console.error('Start trip error:', error);
+        res.status(500).json(errorResponse('Failed to start trip: ' + error.message));
+    }
+});
+// Complete trip - with company verification
+router.post('/:id/complete', async (req, res) => {
+    const { id } = req.params;
+    const { endingOdometer, endOdometer, notes } = req.body;
+    const companyId = req.user?.companyId;
+    const finalOdometer = endingOdometer || endOdometer;
+    console.log('Complete trip request:', { id, finalOdometer, notes, body: req.body });
+    try {
+        // Verify requisition belongs to company
+        let tripDataSql = `
+      SELECT r.* FROM requisitions r 
+      JOIN staff s ON r.requested_by = s.id 
+      WHERE r.id = $1
+    `;
+        let tripDataParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            tripDataSql += ' AND s.company_id = $2';
+            tripDataParams.push(companyId);
+        }
+        const tripData = await (0, database_1.query)(tripDataSql, tripDataParams);
+        if (tripData.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        console.log('Trip data:', tripData[0]);
+        // Require ending odometer for completion
+        if (!finalOdometer) {
+            return res.status(400).json(errorResponse('Ending odometer reading is required'));
+        }
+        const distance = finalOdometer ? finalOdometer - (tripData[0].starting_odometer || 0) : 0;
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
+          ending_odometer = $1, distance_km = $2, completion_notes = $3
+      WHERE id = $4
+    `, [finalOdometer || null, distance, notes || '', id]);
+        // Update vehicle mileage
+        if (tripData[0].vehicle_id && finalOdometer) {
+            await (0, database_1.query)(`
+        UPDATE vehicles 
+        SET current_mileage = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [finalOdometer, tripData[0].vehicle_id]);
+        }
+        const result = await (0, database_1.query)(`
+      SELECT r.*, s.staff_name, v.registration_num
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.id = $1
+    `, [id]);
+        res.json(successResponse(result[0], 'Trip completed'));
+    }
+    catch (error) {
+        console.error('Complete trip error:', error);
+        res.status(500).json(errorResponse('Failed to complete trip: ' + error.message));
+    }
+});
+// Cancel requisition - with company verification
+router.post('/:id/cancel', async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const companyId = req.user?.companyId;
+    try {
+        // Verify requisition belongs to company
+        let reqCheckSql = 'SELECT r.* FROM requisitions r JOIN staff s ON r.requested_by = s.id WHERE r.id = $1';
+        let reqCheckParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqCheckSql += ' AND s.company_id = $2';
+            reqCheckParams.push(companyId);
+        }
+        const reqCheck = await (0, database_1.query)(reqCheckSql, reqCheckParams);
+        if (reqCheck.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET status = 'cancelled', cancellation_reason = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [reason || '', id]);
+        const result = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
+        res.json(successResponse(result[0], 'Requisition cancelled'));
+    }
+    catch (error) {
+        console.error('Cancel requisition error:', error);
+        res.status(500).json(errorResponse('Failed to cancel requisition: ' + error.message));
+    }
+});
+// ==================== LEGACY ENDPOINTS - with company filtering ====================
+// Get my requisitions
+router.get('/my-requests', async (req, res) => {
+    const staffId = req.user?.staffId || req.user?.userId;
+    const companyId = req.user?.companyId;
+    try {
+        let sql = `
+      SELECT r.*, 
+        s.staff_name as requester_name, 
+        d.staff_name as driver_name,
+        v.registration_num
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      WHERE r.requested_by = $1
+    `;
+        let params = [staffId];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND s.company_id = $2';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY r.created_at DESC';
+        const result = await (0, database_1.query)(sql, params);
+        res.json(successResponse(result));
+    }
+    catch (error) {
+        console.error('Get my requests error:', error);
+        res.status(500).json(errorResponse('Failed to fetch requests: ' + error.message));
+    }
+});
+// Get pending approvals - with company filtering
+router.get('/pending-approvals', async (req, res) => {
+    const userDept = req.user?.department;
+    const userRole = req.user?.role;
+    const companyId = req.user?.companyId;
+    const isManager = ['admin', 'manager'].includes(userRole);
+    try {
+        let sql = `
+      SELECT r.*, s.staff_name, s.email, s.department
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'pending'
+    `;
+        let params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND s.company_id = $1';
+            params.push(companyId);
+        }
+        if (!isManager) {
+            const deptParam = companyId && companyId !== 'super_admin' ? '$2' : '$1';
+            sql += ` AND s.department = ${deptParam}`;
+            params.push(userDept);
+        }
+        sql += ' ORDER BY r.created_at DESC';
+        const result = await (0, database_1.query)(sql, params);
+        res.json(successResponse(result));
+    }
+    catch (error) {
+        console.error('Get pending approvals error:', error);
+        res.status(500).json(errorResponse('Failed to fetch pending approvals: ' + error.message));
+    }
+});
+// Get pending allocations - with company filtering
+router.get('/pending-allocations', async (req, res) => {
+    const companyId = req.user?.companyId;
+    try {
+        let sql = `
+      SELECT r.*, s.staff_name as requester_name, s.department
+      FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'approved' AND r.vehicle_id IS NULL
+    `;
+        let params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND s.company_id = $1';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY r.created_at DESC';
+        const result = await (0, database_1.query)(sql, params);
+        res.json(successResponse(result));
+    }
+    catch (error) {
+        console.error('Get pending allocations error:', error);
+        res.status(500).json(errorResponse('Failed to fetch pending allocations: ' + error.message));
+    }
+});
+// Get dashboard stats - with company filtering
+router.get('/stats', async (req, res) => {
+    const userId = req.user?.userId;
+    const staffId = req.user?.staffId;
+    const userRole = req.user?.role;
+    const companyId = req.user?.companyId;
+    const isManager = ['admin', 'manager'].includes(userRole);
+    try {
+        // Build base WHERE clause for company filtering
+        let companyFilter = '';
+        let companyParams = [];
+        if (companyId && companyId !== 'super_admin') {
+            companyFilter = ' AND s.company_id = $1';
+            companyParams.push(companyId);
+        }
+        // Total requests
+        let totalRequestsQuery = `
+      SELECT COUNT(*) as count FROM requisitions r 
+      JOIN staff s ON r.requested_by = s.id 
+      WHERE 1=1${companyFilter}
+    `;
+        let totalRequestsParams = [...companyParams];
+        if (!isManager && staffId) {
+            const staffParamIndex = companyParams.length + 1;
+            totalRequestsQuery += ` AND r.requested_by = $${staffParamIndex}`;
+            totalRequestsParams.push(staffId);
+        }
+        const totalRequests = await (0, database_1.query)(totalRequestsQuery, totalRequestsParams);
+        // Pending approvals
+        const pendingApprovals = await (0, database_1.query)(`
+      SELECT COUNT(*) as count FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'pending'${companyFilter}
+    `, companyParams);
+        // Pending allocations
+        const pendingAllocations = await (0, database_1.query)(`
+      SELECT COUNT(*) as count FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'approved' AND r.vehicle_id IS NULL${companyFilter}
+    `, companyParams);
+        // My assignments
+        let myAssignmentsQuery = `
+      SELECT COUNT(*) as count FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status IN ('allocated', 'in_progress')${companyFilter}
+    `;
+        let myAssignmentsParams = [...companyParams];
+        if (!isManager && staffId) {
+            const driverParamIndex = companyParams.length + 1;
+            myAssignmentsQuery += ` AND r.driver_id = $${driverParamIndex}`;
+            myAssignmentsParams.push(staffId);
+        }
+        const myAssignments = await (0, database_1.query)(myAssignmentsQuery, myAssignmentsParams);
+        // Completed today
+        const completedToday = await (0, database_1.query)(`
+      SELECT COUNT(*) as count FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.status = 'completed' AND DATE(r.completed_at) = CURRENT_DATE${companyFilter}
+    `, companyParams);
+        res.json(successResponse({
+            totalRequests: parseInt(totalRequests[0]?.count || 0),
+            pendingApprovals: parseInt(pendingApprovals[0]?.count || 0),
+            pendingAllocations: parseInt(pendingAllocations[0]?.count || 0),
+            myAssignments: parseInt(myAssignments[0]?.count || 0),
+            completedToday: parseInt(completedToday[0]?.count || 0)
+        }));
+    }
+    catch (error) {
+        console.error('Stats error:', error);
+        res.status(500).json(errorResponse('Failed to fetch stats: ' + error.message));
+    }
+});
+// ========== INSPECTION ENDPOINTS - with company verification ==========
+// GET /api/fleet/requisitions/:id/inspection - Get inspection details
+router.get('/:id/inspection', async (req, res) => {
+    const { id } = req.params;
+    const companyId = req.user?.companyId;
+    try {
+        let sql = `
+      SELECT r.id, r.request_no, r.status,
+        r.inspection_tires, r.inspection_brakes, r.inspection_lights,
+        r.inspection_oil, r.inspection_coolant, r.inspection_battery,
+        r.inspection_wipers, r.inspection_mirrors, r.inspection_seatbelts,
+        r.inspection_fuel, r.defects_found, r.defect_photos,
+        r.inspection_passed, r.inspection_completed_at, r.starting_odometer,
+        v.registration_num, v.make_model,
+        d.staff_name as driver_name
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `;
+        const params = [id];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND s.company_id = $2';
+            params.push(companyId);
+        }
+        const result = await (0, database_1.query)(sql, params);
+        if (result.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found'));
+        }
+        const data = result[0];
+        const inspection = {
+            id: data.id,
+            request_no: data.request_no,
+            status: data.status,
+            vehicle: {
+                registration_num: data.registration_num,
+                make_model: data.make_model
+            },
+            driver: data.driver_name,
+            completed_at: data.inspection_completed_at,
+            passed: data.inspection_passed,
+            starting_odometer: data.starting_odometer,
+            checks: {
+                tires: data.inspection_tires,
+                brakes: data.inspection_brakes,
+                lights: data.inspection_lights,
+                oil: data.inspection_oil,
+                coolant: data.inspection_coolant,
+                battery: data.inspection_battery,
+                wipers: data.inspection_wipers,
+                mirrors: data.inspection_mirrors,
+                seatbelts: data.inspection_seatbelts,
+                fuel: data.inspection_fuel
+            },
+            defects_found: data.defects_found,
+            defect_photos: data.defect_photos
+        };
+        res.json(successResponse(inspection));
+    }
+    catch (error) {
+        console.error('Get inspection error:', error);
+        res.status(500).json(errorResponse('Failed to get inspection: ' + error.message));
+    }
+});
+// Submit driver inspection - with company verification
 router.post('/:id/inspection', async (req, res) => {
     const { id } = req.params;
     const { tires_ok, brakes_ok, lights_ok, oil_ok, coolant_ok, battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok, defects_found, defect_photos, passed, starting_odometer } = req.body;
+    const companyId = req.user?.companyId;
     try {
-        // Get requisition details first
-        const reqResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
+        // Verify requisition belongs to company
+        let reqSql = `
+      SELECT r.* FROM requisitions r
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1
+    `;
+        let reqParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqSql += ' AND s.company_id = $2';
+            reqParams.push(companyId);
+        }
+        const reqResult = await (0, database_1.query)(reqSql, reqParams);
         if (reqResult.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
+            return res.status(404).json(errorResponse('Requisition not found'));
         }
         const requisition = reqResult[0];
         await (0, database_1.query)(`
@@ -315,7 +864,7 @@ router.post('/:id/inspection', async (req, res) => {
             battery_ok, wipers_ok, mirrors_ok, seatbelts_ok, fuel_ok,
             defects_found || '', JSON.stringify(defect_photos || []),
             passed, starting_odometer || null,
-            passed ? 'ready_for_departure' : 'inspection_failed',
+            passed ? 'inspection_done' : 'inspection_failed',
             id
         ]);
         // If inspection failed, flag the vehicle as defective
@@ -328,25 +877,7 @@ router.post('/:id/inspection', async (req, res) => {
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `, [defects_found || 'Vehicle failed pre-trip inspection', requisition.vehicle_id]);
-            // Create a job card entry for the defective vehicle
-            const jobCardId = (0, uuid_1.v4)();
-            const year = new Date().getFullYear();
-            const jobCardNumber = `JB-${Math.random().toString(36).substring(2, 6).toUpperCase()}-${year}`;
-            await (0, database_1.query)(`
-        INSERT INTO job_cards (
-          id, job_card_number, vehicle_id, defect_description, 
-          reported_by, reported_at, status, source_type, source_id
-        ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, 'Pending', 'inspection', $6)
-      `, [
-                jobCardId,
-                jobCardNumber,
-                requisition.vehicle_id,
-                defects_found || 'Vehicle failed pre-trip inspection',
-                requisition.driver_id,
-                id
-            ]);
         }
-        // Get details for notification
         const result = await (0, database_1.query)(`
       SELECT r.*, v.registration_num, d.staff_name as driver_name
       FROM requisitions r
@@ -354,539 +885,270 @@ router.post('/:id/inspection', async (req, res) => {
       LEFT JOIN staff d ON r.driver_id = d.id
       WHERE r.id = $1
     `, [id]);
-        if (result.length > 0) {
-            // Non-blocking email
-            email_1.default.sendInspectionNotification(result[0].registration_num, result[0].driver_name, passed).catch((err) => console.error('Email failed:', err));
-            // Send maintenance notification if inspection failed
-            if (!passed) {
-                email_1.default.sendMaintenanceNotification(result[0].registration_num, result[0].driver_name, defects_found || 'Vehicle failed pre-trip inspection').catch((err) => console.error('Maintenance email failed:', err));
-            }
-        }
-        res.json({
-            message: 'Inspection submitted',
+        res.json(successResponse({
             passed,
             requisition: result[0],
             vehicle_flagged: !passed
-        });
+        }, 'Inspection submitted'));
     }
     catch (error) {
         console.error('Inspection error:', error);
-        res.status(500).json({ error: 'Failed to submit inspection' });
+        res.status(500).json(errorResponse('Failed to submit inspection: ' + error.message));
     }
 });
-// Close trip (Supervisor)
-router.post('/:id/close', async (req, res) => {
-    const { id } = req.params;
-    const { ending_odometer } = req.body;
-    const closedBy = req.user?.userId;
-    try {
-        // Get starting odometer
-        const reqData = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        if (reqData.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
-        }
-        const distance = ending_odometer - (reqData[0].starting_odometer || 0);
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        ending_odometer = $1, 
-        distance_km = $2,
-        closed_by = $3,
-        closed_at = CURRENT_TIMESTAMP,
-        status = 'completed'
-      WHERE id = $4
-    `, [ending_odometer, distance, closedBy, id]);
-        // Get details for notification
-        const result = await (0, database_1.query)(`
-      SELECT r.*, s.staff_name, v.registration_num
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      WHERE r.id = $1
-    `, [id]);
-        if (result.length > 0) {
-            // Non-blocking email
-            email_1.default.sendTripCompleted(result[0].staff_name, result[0].registration_num, distance).catch((err) => console.error('Email failed:', err));
-        }
-        res.json({ message: 'Trip closed', distance, requisition: result[0] });
-    }
-    catch (error) {
-        console.error('Close trip error:', error);
-        res.status(500).json({ error: 'Failed to close trip' });
-    }
-});
-// Rate driver
-router.post('/:id/rate', async (req, res) => {
-    const { id } = req.params;
-    const { rating, comment } = req.body; // rating 1-5
-    try {
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET driver_rating = $1, driver_rating_comment = $2, rated_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-    `, [rating, comment || '', id]);
-        res.json({ message: 'Driver rated' });
-    }
-    catch (error) {
-        console.error('Rate driver error:', error);
-        res.status(500).json({ error: 'Failed to submit rating' });
-    }
-});
-// ========== INSPECTION FAILURE HANDLING ==========
-// Retry inspection - reset from inspection_failed to allocated
-router.post('/:id/retry-inspection', async (req, res) => {
-    const { id } = req.params;
-    try {
-        // Verify trip is in inspection_failed status
-        const checkResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1 AND status = $2', [id, 'inspection_failed']);
-        if (checkResult.length === 0) {
-            return res.status(400).json({ error: 'Trip not in inspection_failed status' });
-        }
-        // Reset status to allocated and clear inspection data
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        status = 'allocated',
-        inspection_passed = null,
-        inspection_completed_at = null,
-        defects_found = null,
-        inspection_tires = null,
-        inspection_brakes = null,
-        inspection_lights = null,
-        inspection_oil = null,
-        inspection_coolant = null,
-        inspection_battery = null,
-        inspection_wipers = null,
-        inspection_mirrors = null,
-        inspection_seatbelts = null,
-        inspection_fuel = null,
-        starting_odometer = null
-      WHERE id = $1
-    `, [id]);
-        res.json({ message: 'Inspection reset - ready for retry' });
-    }
-    catch (error) {
-        console.error('Retry inspection error:', error);
-        res.status(500).json({ error: 'Failed to reset inspection' });
-    }
-});
-// Reallocate vehicle after inspection failure
-router.post('/:id/reallocate', async (req, res) => {
-    const { id } = req.params;
-    const { vehicle_id, driver_id } = req.body;
-    const staffId = req.user?.staffId;
-    if (!vehicle_id || !driver_id) {
-        return res.status(400).json({ error: 'Vehicle and driver required' });
-    }
-    try {
-        // Verify trip is in inspection_failed status
-        const checkResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1 AND status = $2', [id, 'inspection_failed']);
-        if (checkResult.length === 0) {
-            return res.status(400).json({ error: 'Trip not in inspection_failed status' });
-        }
-        const allocatedBy = staffId || null;
-        // Update with new vehicle/driver and reset inspection
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        vehicle_id = $1,
-        driver_id = $2,
-        allocated_by = $3,
-        allocated_at = CURRENT_TIMESTAMP,
-        status = 'allocated',
-        inspection_passed = null,
-        inspection_completed_at = null,
-        defects_found = null,
-        inspection_tires = null,
-        inspection_brakes = null,
-        inspection_lights = null,
-        inspection_oil = null,
-        inspection_coolant = null,
-        inspection_battery = null,
-        inspection_wipers = null,
-        inspection_mirrors = null,
-        inspection_seatbelts = null,
-        inspection_fuel = null,
-        starting_odometer = null
-      WHERE id = $4
-    `, [vehicle_id, driver_id, allocatedBy, id]);
-        // Get updated details
-        const result = await (0, database_1.query)(`
-      SELECT r.*, v.registration_num, d.staff_name as driver_name
-      FROM requisitions r
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = $1
-    `, [id]);
-        res.json({ message: 'Vehicle reallocated', requisition: result[0] });
-    }
-    catch (error) {
-        console.error('Reallocate error:', error);
-        res.status(500).json({ error: 'Failed to reallocate vehicle' });
-    }
-});
-// Get dashboard stats
-router.get('/stats', async (req, res) => {
-    const userId = req.user?.userId;
-    const staffId = req.user?.staffId;
-    const userRole = req.user?.role;
-    const isManager = ['admin', 'manager'].includes(userRole);
-    const isDriver = userRole === 'driver';
-    try {
-        // Base query conditions
-        const today = new Date().toISOString().split('T')[0];
-        // Total requests (for user's scope)
-        let totalRequestsQuery = 'SELECT COUNT(*) as count FROM requisitions';
-        let totalRequestsParams = [];
-        if (!isManager && staffId) {
-            totalRequestsQuery += ' WHERE requested_by = $1';
-            totalRequestsParams.push(staffId);
-        }
-        const totalRequests = await (0, database_1.query)(totalRequestsQuery, totalRequestsParams);
-        // Pending approvals
-        let pendingApprovalsQuery = `SELECT COUNT(*) as count FROM requisitions r WHERE r.status = 'pending'`;
-        let pendingApprovalsParams = [];
-        if (!isManager && req.user?.department) {
-            pendingApprovalsQuery += ` AND EXISTS (SELECT 1 FROM staff s WHERE s.id = r.requested_by AND s.department = $1)`;
-            pendingApprovalsParams.push(req.user.department);
-        }
-        const pendingApprovals = await (0, database_1.query)(pendingApprovalsQuery, pendingApprovalsParams);
-        // Pending allocations
-        const pendingAllocations = await (0, database_1.query)(`
-      SELECT COUNT(*) as count FROM requisitions WHERE status = 'approved' AND vehicle_id IS NULL
-    `);
-        // My assignments (for drivers)
-        let myAssignmentsQuery = `SELECT COUNT(*) as count FROM requisitions WHERE status IN ('allocated', 'ready_for_departure', 'departed')`;
-        let myAssignmentsParams = [];
-        if (isDriver && staffId) {
-            myAssignmentsQuery += ' AND driver_id = $1';
-            myAssignmentsParams.push(staffId);
-        }
-        else if (!isManager) {
-            myAssignmentsQuery += ' AND driver_id = $1';
-            myAssignmentsParams.push(staffId || 'NONE');
-        }
-        const myAssignments = await (0, database_1.query)(myAssignmentsQuery, myAssignmentsParams);
-        // Completed today
-        let completedTodayQuery = `SELECT COUNT(*) as count FROM requisitions WHERE status = 'completed' AND DATE(closed_at) = CURRENT_DATE`;
-        let completedTodayParams = [];
-        if (!isManager && staffId) {
-            completedTodayQuery += ' AND requested_by = $1';
-            completedTodayParams.push(staffId);
-        }
-        const completedToday = await (0, database_1.query)(completedTodayQuery, completedTodayParams);
-        res.json({
-            totalRequests: parseInt(totalRequests[0]?.count || 0),
-            pendingApprovals: parseInt(pendingApprovals[0]?.count || 0),
-            pendingAllocations: parseInt(pendingAllocations[0]?.count || 0),
-            myAssignments: parseInt(myAssignments[0]?.count || 0),
-            completedToday: parseInt(completedToday[0]?.count || 0)
-        });
-    }
-    catch (error) {
-        console.error('Stats error:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
-    }
-});
-// Get active trips (driver view)
-router.get('/active-trips', async (req, res) => {
-    const staffId = req.user?.staffId;
-    const userRole = req.user?.role;
-    const isManager = ['admin', 'manager'].includes(userRole);
-    try {
-        let queryStr = `
-      SELECT r.*, 
-        s.staff_name as requester_name, s.department,
-        v.registration_num, v.make_model,
-        d.staff_name as driver_name
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.status IN ('ready_for_departure', 'departed')
-    `;
-        let params = [];
-        // Non-managers only see their own trips
-        if (!isManager && staffId) {
-            queryStr += ` AND (r.requested_by = $1 OR r.driver_id = $1)`;
-            params.push(staffId);
-        }
-        queryStr += ` ORDER BY r.travel_date DESC, r.travel_time DESC`;
-        const result = await (0, database_1.query)(queryStr, params);
-        res.json(result);
-    }
-    catch (error) {
-        console.error('Active trips error:', error);
-        res.status(500).json({ error: 'Failed to fetch active trips' });
-    }
-});
-// Mark trip as departed (Driver)
+// ========== SECURITY ENDPOINTS - Gate Control ==========
+// POST /api/fleet/requisitions/:id/depart - Security confirms vehicle departure
 router.post('/:id/depart', async (req, res) => {
     const { id } = req.params;
-    const { starting_odometer } = req.body;
-    const staffId = req.user?.staffId;
+    const { gate_notes } = req.body;
+    const companyId = req.user?.companyId;
+    const securityId = req.user?.staffId || req.user?.userId;
     try {
-        // Verify trip is allocated to this driver
-        const checkResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        if (checkResult.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
-        }
-        const trip = checkResult[0];
-        if (trip.status !== 'ready_for_departure') {
-            return res.status(400).json({ error: 'Trip is not ready for departure' });
-        }
-        if (trip.driver_id !== staffId) {
-            return res.status(403).json({ error: 'Not authorized - not assigned to this trip' });
-        }
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        status = 'departed',
-        departed_at = CURRENT_TIMESTAMP,
-        starting_odometer = $1
-      WHERE id = $2
-    `, [starting_odometer || trip.starting_odometer, id]);
-        // Update vehicle status
-        await (0, database_1.query)(`
-      UPDATE vehicles 
-      SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
-    `, [trip.vehicle_id]);
-        const result = await (0, database_1.query)(`
+        // Verify requisition belongs to company and is ready for departure
+        let reqSql = `
       SELECT r.*, v.registration_num, d.staff_name as driver_name
       FROM requisitions r
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = $1
-    `, [id]);
-        res.json({ message: 'Trip marked as departed', trip: result[0] });
-    }
-    catch (error) {
-        console.error('Depart error:', error);
-        res.status(500).json({ error: 'Failed to mark departure' });
-    }
-});
-// Mark trip as completed (Driver)
-router.post('/:id/complete', async (req, res) => {
-    const { id } = req.params;
-    const { ending_odometer, notes } = req.body;
-    const staffId = req.user?.staffId;
-    if (!ending_odometer) {
-        return res.status(400).json({ error: 'Ending odometer required' });
-    }
-    try {
-        const checkResult = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        if (checkResult.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1 AND r.status IN ('ready_for_departure', 'inspection_done')
+    `;
+        const reqParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqSql += ' AND s.company_id = $2';
+            reqParams.push(companyId);
         }
-        const trip = checkResult[0];
-        if (trip.status !== 'departed') {
-            return res.status(400).json({ error: 'Trip has not departed yet' });
+        const reqResult = await (0, database_1.query)(reqSql, reqParams);
+        if (reqResult.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found or not ready for departure'));
         }
-        if (trip.driver_id !== staffId) {
-            return res.status(403).json({ error: 'Not authorized - not assigned to this trip' });
-        }
-        const distance = ending_odometer - (trip.starting_odometer || 0);
+        const requisition = reqResult[0];
+        // Update requisition status to departed
         await (0, database_1.query)(`
       UPDATE requisitions 
-      SET 
-        status = 'completed',
-        completed_at = CURRENT_TIMESTAMP,
-        ending_odometer = $1,
-        distance_km = $2,
-        completion_notes = $3
-      WHERE id = $4
-    `, [ending_odometer, distance, notes || '', id]);
-        // Update vehicle mileage and status
-        await (0, database_1.query)(`
-      UPDATE vehicles 
-      SET 
-        status = 'Active', 
-        current_mileage = $1,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [ending_odometer, trip.vehicle_id]);
-        const result = await (0, database_1.query)(`
-      SELECT r.*, v.registration_num, d.staff_name as driver_name, s.staff_name as requester_name
+      SET status = 'in_transit',
+          departed_at = CURRENT_TIMESTAMP,
+          departed_by = $1,
+          departure_gate_notes = $2
+      WHERE id = $3
+    `, [securityId, gate_notes || '', id]);
+        // Update vehicle status to On Trip
+        if (requisition.vehicle_id) {
+            await (0, database_1.query)(`
+        UPDATE vehicles 
+        SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+      `, [requisition.vehicle_id]);
+        }
+        res.json(successResponse({
+            id,
+            status: 'in_transit',
+            departed_at: new Date().toISOString(),
+            vehicle: requisition.registration_num,
+            driver: requisition.driver_name
+        }, 'Vehicle departure confirmed'));
+    }
+    catch (error) {
+        console.error('Departure confirmation error:', error);
+        res.status(500).json(errorResponse('Failed to confirm departure: ' + error.message));
+    }
+});
+// POST /api/fleet/requisitions/:id/return - Security confirms vehicle return
+router.post('/:id/return', async (req, res) => {
+    const { id } = req.params;
+    const { ending_odometer, return_notes, gate_notes } = req.body;
+    const companyId = req.user?.companyId;
+    const securityId = req.user?.staffId || req.user?.userId;
+    try {
+        // Verify requisition belongs to company and is in transit
+        let reqSql = `
+      SELECT r.*, v.registration_num, d.staff_name as driver_name, r.vehicle_id
       FROM requisitions r
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
       JOIN staff s ON r.requested_by = s.id
-      WHERE r.id = $1
-    `, [id]);
-        // Send notification email
-        email_1.default.sendTripCompleted(result[0].requester_name, result[0].registration_num, distance).catch((err) => console.error('Email failed:', err));
-        res.json({
-            message: 'Trip completed successfully',
-            trip: result[0],
-            distance
-        });
+      WHERE r.id = $1 AND r.status = 'in_transit'
+    `;
+        const reqParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqSql += ' AND s.company_id = $2';
+            reqParams.push(companyId);
+        }
+        const reqResult = await (0, database_1.query)(reqSql, reqParams);
+        if (reqResult.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found or vehicle not in transit'));
+        }
+        const requisition = reqResult[0];
+        // Validate ending odometer is greater than starting
+        if (ending_odometer && requisition.starting_odometer &&
+            parseInt(ending_odometer) <= parseInt(requisition.starting_odometer)) {
+            return res.status(400).json(errorResponse('Ending odometer must be greater than starting odometer', { starting: requisition.starting_odometer, ending: ending_odometer }));
+        }
+        // Calculate distance traveled
+        const distanceTraveled = ending_odometer && requisition.starting_odometer
+            ? parseInt(ending_odometer) - parseInt(requisition.starting_odometer)
+            : null;
+        // Update requisition status to completed
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET status = 'completed',
+          returned_at = CURRENT_TIMESTAMP,
+          returned_by = $1,
+          ending_odometer = $2,
+          distance_traveled = $3,
+          return_notes = $4,
+          return_gate_notes = $5,
+          completed_at = CURRENT_TIMESTAMP
+      WHERE id = $6
+    `, [securityId, ending_odometer || null, distanceTraveled, return_notes || '', gate_notes || '', id]);
+        // Update vehicle status back to Available and update mileage
+        if (requisition.vehicle_id) {
+            await (0, database_1.query)(`
+        UPDATE vehicles 
+        SET status = 'Available', 
+            current_mileage = COALESCE($1, current_mileage),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `, [ending_odometer, requisition.vehicle_id]);
+        }
+        res.json(successResponse({
+            id,
+            status: 'completed',
+            returned_at: new Date().toISOString(),
+            vehicle: requisition.registration_num,
+            driver: requisition.driver_name,
+            starting_odometer: requisition.starting_odometer,
+            ending_odometer: ending_odometer,
+            distance_traveled: distanceTraveled
+        }, 'Vehicle return confirmed - Trip completed'));
     }
     catch (error) {
-        console.error('Complete error:', error);
-        res.status(500).json({ error: 'Failed to complete trip' });
+        console.error('Return confirmation error:', error);
+        res.status(500).json(errorResponse('Failed to confirm return: ' + error.message));
     }
 });
-// ========== SECURITY GATE MANAGEMENT ==========
-// Get vehicles ready for departure (allocated and inspected)
-router.get('/security/ready-for-departure', async (req, res) => {
+// POST /api/fleet/requisitions/:id/complete-trip - Driver submits ending odometer
+router.post('/:id/complete-trip', async (req, res) => {
+    const { id } = req.params;
+    const { ending_odometer, return_notes } = req.body;
+    const companyId = req.user?.companyId;
+    const driverId = req.user?.staffId || req.user?.userId;
+    // Validation
+    if (!ending_odometer) {
+        return res.status(400).json(errorResponse('Ending odometer is required'));
+    }
     try {
-        const result = await (0, database_1.query)(`
+        // Verify requisition belongs to company, is in transit, and user is the assigned driver
+        let reqSql = `
+      SELECT r.*, v.registration_num, d.staff_name as driver_name, r.starting_odometer
+      FROM requisitions r
+      LEFT JOIN vehicles v ON r.vehicle_id = v.id
+      LEFT JOIN staff d ON r.driver_id = d.id
+      JOIN staff s ON r.requested_by = s.id
+      WHERE r.id = $1 AND r.status = 'in_transit'
+    `;
+        const reqParams = [id];
+        if (companyId && companyId !== 'super_admin') {
+            reqSql += ' AND s.company_id = $2';
+            reqParams.push(companyId);
+        }
+        const reqResult = await (0, database_1.query)(reqSql, reqParams);
+        if (reqResult.length === 0) {
+            return res.status(404).json(errorResponse('Requisition not found or vehicle not in transit'));
+        }
+        const requisition = reqResult[0];
+        // Verify the user is the assigned driver
+        if (requisition.driver_id !== driverId) {
+            return res.status(403).json(errorResponse('Only the assigned driver can complete this trip'));
+        }
+        // Validate ending odometer is greater than starting
+        if (requisition.starting_odometer &&
+            parseInt(ending_odometer) <= parseInt(requisition.starting_odometer)) {
+            return res.status(400).json(errorResponse('Ending odometer must be greater than starting odometer', { starting: requisition.starting_odometer, ending: ending_odometer }));
+        }
+        // Update requisition with ending odometer
+        await (0, database_1.query)(`
+      UPDATE requisitions 
+      SET ending_odometer = $1,
+          return_notes = $2,
+          trip_completed_by_driver_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+    `, [ending_odometer, return_notes || '', id]);
+        res.json(successResponse({
+            id,
+            status: 'in_transit',
+            message: 'Trip completion submitted. Waiting for security confirmation.',
+            vehicle: requisition.registration_num,
+            starting_odometer: requisition.starting_odometer,
+            ending_odometer: ending_odometer
+        }, 'Trip completion recorded. Please proceed to security gate.'));
+    }
+    catch (error) {
+        console.error('Complete trip error:', error);
+        res.status(500).json(errorResponse('Failed to complete trip: ' + error.message));
+    }
+});
+// GET /api/fleet/requisitions/gate/pending - Get requisitions pending security action
+router.get('/gate/pending', async (req, res) => {
+    try {
+        const companyId = req.user?.companyId;
+        const { type } = req.query; // 'departure' or 'return'
+        let statusFilter = '';
+        if (type === 'departure') {
+            statusFilter = `r.status IN ('ready_for_departure', 'inspection_done')`;
+        }
+        else if (type === 'return') {
+            statusFilter = `r.status = 'in_transit'`;
+        }
+        else {
+            statusFilter = `r.status IN ('ready_for_departure', 'inspection_done', 'in_transit')`;
+        }
+        let sql = `
       SELECT r.*, 
         s.staff_name as requester_name, s.department,
-        v.registration_num, v.make_model,
-        d.staff_name as driver_name, d.phone as driver_phone
+        v.registration_num, v.make_model, v.current_mileage,
+        d.staff_name as driver_name,
+        r.inspection_completed_at, r.starting_odometer,
+        r.departed_at, r.departed_by
       FROM requisitions r
       JOIN staff s ON r.requested_by = s.id
       LEFT JOIN vehicles v ON r.vehicle_id = v.id
       LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.status IN ('allocated', 'ready_for_departure')
-        AND r.inspection_passed = true
-      ORDER BY r.travel_date, r.travel_time
-    `);
-        res.json(result);
+      WHERE ${statusFilter}
+    `;
+        const params = [];
+        if (companyId && companyId !== 'super_admin') {
+            sql += ' AND s.company_id = $1';
+            params.push(companyId);
+        }
+        sql += ' ORDER BY r.inspection_completed_at ASC NULLS LAST, r.departed_at ASC NULLS LAST';
+        const result = await (0, database_1.query)(sql, params);
+        // Format for security UI
+        const formatted = result.map((r) => ({
+            id: r.id,
+            request_no: r.request_no,
+            status: r.status,
+            action_needed: r.status === 'in_transit' ? 'Confirm Return' : 'Confirm Departure',
+            vehicle: {
+                registration: r.registration_num,
+                make_model: r.make_model
+            },
+            driver: r.driver_name,
+            requester: r.requester_name,
+            department: r.department,
+            destination: r.destination,
+            purpose: r.purpose,
+            passenger_count: r.num_passengers,
+            inspection_completed: !!r.inspection_completed_at,
+            departed: !!r.departed_at,
+            starting_odometer: r.starting_odometer,
+            current_mileage: r.current_mileage
+        }));
+        res.json(successResponse(formatted));
     }
     catch (error) {
-        console.error('Get ready for departure error:', error);
-        res.status(500).json({ error: 'Failed to fetch vehicles' });
-    }
-});
-// Get active trips (departed but not returned)
-router.get('/security/active-trips', async (req, res) => {
-    try {
-        const result = await (0, database_1.query)(`
-      SELECT r.*, 
-        s.staff_name as requester_name, s.department,
-        v.registration_num, v.make_model,
-        d.staff_name as driver_name, d.phone as driver_phone,
-        sec.staff_name as security_name
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      LEFT JOIN staff sec ON r.security_cleared_by = sec.id
-      WHERE r.status = 'departed'
-      ORDER BY r.departed_at DESC
-    `);
-        res.json(result);
-    }
-    catch (error) {
-        console.error('Get active trips error:', error);
-        res.status(500).json({ error: 'Failed to fetch active trips' });
-    }
-});
-// Security check-out (vehicle leaving) - NO STARTING ODOMETER, just verify and check out
-router.post('/:id/security-checkout', async (req, res) => {
-    const { id } = req.params;
-    const securityId = req.user?.userId;
-    try {
-        // Verify the trip has been inspected and has starting odometer recorded
-        const tripCheck = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        if (tripCheck.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
-        }
-        const trip = tripCheck[0];
-        if (!trip.inspection_passed) {
-            return res.status(400).json({ error: 'Vehicle has not passed inspection' });
-        }
-        if (!trip.starting_odometer) {
-            return res.status(400).json({ error: 'Starting odometer not recorded. Complete inspection first.' });
-        }
-        // Update requisition - Security just verifies and checks out
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        security_cleared_by = $1,
-        security_cleared_at = CURRENT_TIMESTAMP,
-        departed_at = CURRENT_TIMESTAMP,
-        status = 'departed'
-      WHERE id = $2
-    `, [securityId, id]);
-        // Get details for response
-        const result = await (0, database_1.query)(`
-      SELECT r.*, 
-        s.staff_name as requester_name,
-        v.registration_num, 
-        d.staff_name as driver_name
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = $1
-    `, [id]);
-        if (result.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
-        }
-        // Update vehicle status to 'On Trip'
-        await (0, database_1.query)(`
-      UPDATE vehicles 
-      SET status = 'On Trip', updated_at = CURRENT_TIMESTAMP
-      WHERE id = $1
-    `, [result[0].vehicle_id]);
-        res.json({
-            message: 'Vehicle checked out successfully',
-            trip: result[0],
-            departed_at: new Date().toISOString()
-        });
-    }
-    catch (error) {
-        console.error('Security checkout error:', error);
-        res.status(500).json({ error: 'Failed to check out vehicle' });
-    }
-});
-// Security check-in (vehicle returning)
-router.post('/:id/security-checkin', async (req, res) => {
-    const { id } = req.params;
-    const { ending_odometer, notes } = req.body;
-    const securityId = req.user?.userId;
-    if (!ending_odometer) {
-        return res.status(400).json({ error: 'Ending odometer reading required' });
-    }
-    try {
-        // Get trip details first
-        const tripData = await (0, database_1.query)('SELECT * FROM requisitions WHERE id = $1', [id]);
-        if (tripData.length === 0) {
-            return res.status(404).json({ error: 'Requisition not found' });
-        }
-        const distance = ending_odometer - (tripData[0].starting_odometer || 0);
-        await (0, database_1.query)(`
-      UPDATE requisitions 
-      SET 
-        ending_odometer = $1,
-        distance_km = $2,
-        return_notes = $3,
-        returned_at = CURRENT_TIMESTAMP,
-        status = 'returned'
-      WHERE id = $4
-    `, [ending_odometer, distance, notes || '', id]);
-        // Update vehicle status back to Active
-        await (0, database_1.query)(`
-      UPDATE vehicles 
-      SET status = 'Active', current_mileage = current_mileage + $1, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [distance, tripData[0].vehicle_id]);
-        // Get details for response
-        const result = await (0, database_1.query)(`
-      SELECT r.*, 
-        s.staff_name as requester_name,
-        v.registration_num, 
-        d.staff_name as driver_name
-      FROM requisitions r
-      JOIN staff s ON r.requested_by = s.id
-      LEFT JOIN vehicles v ON r.vehicle_id = v.id
-      LEFT JOIN staff d ON r.driver_id = d.id
-      WHERE r.id = $1
-    `, [id]);
-        res.json({
-            message: 'Vehicle checked in successfully',
-            trip: result[0],
-            distance,
-            returned_at: new Date().toISOString()
-        });
-    }
-    catch (error) {
-        console.error('Security checkin error:', error);
-        res.status(500).json({ error: 'Failed to check in vehicle' });
+        console.error('Get gate pending error:', error);
+        res.status(500).json(errorResponse('Failed to fetch pending requisitions'));
     }
 });
 exports.default = router;

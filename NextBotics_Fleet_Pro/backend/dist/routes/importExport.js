@@ -245,6 +245,21 @@ router.get('/templates/:type', async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to generate template' });
     }
 });
+// Helper function to get value from row with flexible column names
+function getValue(row, possibleNames) {
+    for (const name of possibleNames) {
+        // Try normalized name first (lowercase, underscores)
+        const normalized = name.toLowerCase().trim().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        if (row[normalized] !== undefined && row[normalized] !== '') {
+            return row[normalized];
+        }
+        // Also try exact match
+        if (row[name] !== undefined && row[name] !== '') {
+            return row[name];
+        }
+    }
+    return undefined;
+}
 // ============================================
 // BACKGROUND PROCESSING
 // ============================================
@@ -378,92 +393,157 @@ async function processImportJob(jobId, companyId, userId, importType, rows, skip
     }
 }
 async function importVehicle(companyId, row) {
+    const regNumber = getValue(row, ['registration_number', 'reg_number', 'registration', 'reg_no', 'plate', 'license_plate']);
+    const make = getValue(row, ['make', 'manufacturer', 'brand']) || '';
+    const model = getValue(row, ['model', 'model_name', 'vehicle_model']) || '';
+    const year = getValue(row, ['year', 'year_of_manufacture', 'manufacture_year', 'model_year']);
+    const type = getValue(row, ['type', 'vehicle_type', 'category']) || 'car';
+    const fuelType = getValue(row, ['fuel_type', 'fuel', 'fuel_category']);
+    const fuelCapacity = getValue(row, ['fuel_capacity', 'fuel_tank_capacity', 'tank_capacity']);
+    const engineCapacity = getValue(row, ['engine_capacity', 'engine_size', 'displacement']);
+    const color = getValue(row, ['color', 'colour', 'paint']);
+    const vin = getValue(row, ['vin', 'chassis_number', 'vehicle_id']);
+    const engineNumber = getValue(row, ['engine_number', 'engine_no']);
+    const purchaseDate = getValue(row, ['purchase_date', 'date_purchased', 'acquisition_date']);
+    const purchasePrice = getValue(row, ['purchase_price', 'cost', 'price', 'value']);
+    const currentOdometer = getValue(row, ['current_odometer', 'odometer', 'mileage', 'km']);
+    const status = getValue(row, ['status', 'state', 'condition']) || 'available';
     // Check if vehicle exists
-    const existing = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.registration_number, companyId]);
+    const existing = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [regNumber, companyId]);
     if (existing.length > 0) {
         // Update existing
         await (0, database_1.query)(`UPDATE vehicles SET 
         make = $1, model = $2, year = $3, type = $4, fuel_type = $5, 
         fuel_capacity = $6, engine_capacity = $7, color = $8, vin = $9,
         engine_number = $10, purchase_price = $11, updated_at = NOW()
-       WHERE id = $12`, [row.make, row.model, row.year, row.type, row.fuel_type,
-            row.fuel_capacity, row.engine_capacity, row.color, row.vin,
-            row.engine_number, row.purchase_price, existing[0].id]);
+       WHERE id = $12`, [make, model, year ? parseInt(year) : null, type, fuelType,
+            fuelCapacity ? parseFloat(fuelCapacity) : null,
+            engineCapacity ? parseFloat(engineCapacity) : null,
+            color, vin, engineNumber,
+            purchasePrice ? parseFloat(purchasePrice) : null,
+            existing[0].id]);
     }
     else {
         // Create new
         await (0, database_1.query)(`INSERT INTO vehicles (company_id, registration_number, make, model, year, type, 
        fuel_type, fuel_capacity, engine_capacity, color, vin, engine_number, 
        purchase_date, purchase_price, current_odometer, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`, [companyId, row.registration_number, row.make, row.model, row.year, row.type || 'car',
-            row.fuel_type, row.fuel_capacity, row.engine_capacity, row.color, row.vin,
-            row.engine_number, row.purchase_date, row.purchase_price,
-            row.current_odometer || 0, row.status || 'available']);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`, [companyId, regNumber, make, model, year ? parseInt(year) : null, type,
+            fuelType,
+            fuelCapacity ? parseFloat(fuelCapacity) : null,
+            engineCapacity ? parseFloat(engineCapacity) : null,
+            color, vin,
+            engineNumber, purchaseDate,
+            purchasePrice ? parseFloat(purchasePrice) : null,
+            currentOdometer ? parseFloat(currentOdometer) : 0,
+            status]);
     }
 }
 async function importDriver(companyId, row) {
-    const existing = await (0, database_1.query)('SELECT id FROM drivers WHERE license_number = $1 AND company_id = $2', [row.license_number, companyId]);
+    const firstName = getValue(row, ['first_name', 'firstname', 'fname', 'given_name']) || '';
+    const lastName = getValue(row, ['last_name', 'lastname', 'lname', 'surname', 'family_name']) || '';
+    const email = getValue(row, ['email', 'email_address', 'e-mail']);
+    const phone = getValue(row, ['phone', 'mobile', 'telephone', 'contact']);
+    const employeeId = getValue(row, ['employee_id', 'employee_no', 'emp_id', 'staff_id']);
+    const licenseNumber = getValue(row, ['license_number', 'license_no', 'licence_number', 'driving_license', 'dl_number']) || '';
+    const licenseClass = getValue(row, ['license_class', 'licence_class', 'dl_class']);
+    const licenseExpiry = getValue(row, ['license_expiry', 'license_expiry_date', 'licence_expiry']);
+    const employmentStatus = getValue(row, ['employment_status', 'status', 'employee_status']) || 'active';
+    const department = getValue(row, ['department', 'dept', 'division']);
+    const existing = await (0, database_1.query)('SELECT id FROM drivers WHERE license_number = $1 AND company_id = $2', [licenseNumber, companyId]);
     if (existing.length > 0) {
         await (0, database_1.query)(`UPDATE drivers SET 
         first_name = $1, last_name = $2, email = $3, phone = $4,
         license_class = $5, license_expiry = $6, department = $7, updated_at = NOW()
-       WHERE id = $8`, [row.first_name, row.last_name, row.email, row.phone,
-            row.license_class, row.license_expiry, row.department, existing[0].id]);
+       WHERE id = $8`, [firstName, lastName, email, phone, licenseClass, licenseExpiry, department, existing[0].id]);
     }
     else {
         await (0, database_1.query)(`INSERT INTO drivers (company_id, first_name, last_name, email, phone, employee_id,
        license_number, license_class, license_expiry, employment_status, department)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [companyId, row.first_name, row.last_name, row.email, row.phone, row.employee_id,
-            row.license_number, row.license_class, row.license_expiry,
-            row.employment_status || 'active', row.department]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [companyId, firstName, lastName, email, phone, employeeId,
+            licenseNumber, licenseClass, licenseExpiry, employmentStatus, department]);
     }
 }
 async function importInventoryItem(companyId, userId, row) {
+    const sku = getValue(row, ['sku', 'item_code', 'product_code', 'code', 'part_number']);
+    const name = getValue(row, ['name', 'item_name', 'product_name', 'description']);
+    const description = getValue(row, ['description', 'desc', 'details']);
+    const category = getValue(row, ['category', 'item_category', 'product_category']);
+    const unitOfMeasure = getValue(row, ['unit_of_measure', 'uom', 'unit', 'measure']);
+    const unitPrice = getValue(row, ['unit_price', 'price', 'cost', 'unit_cost']);
+    const currentStock = getValue(row, ['current_stock', 'stock', 'quantity', 'qty', 'in_stock']);
+    const reorderLevel = getValue(row, ['reorder_level', 'reorder_point', 'min_stock']);
+    const reorderQuantity = getValue(row, ['reorder_quantity', 'reorder_qty', 'order_qty']);
+    const supplierName = getValue(row, ['supplier_name', 'supplier', 'vendor', 'provider']);
+    const supplierContact = getValue(row, ['supplier_contact', 'supplier_phone', 'vendor_contact']);
+    const location = getValue(row, ['location', 'storage_location', 'warehouse', 'bin']);
     // Get or create category
     let categoryId = null;
-    if (row.category) {
-        const catRows = await (0, database_1.query)('SELECT id FROM inventory_categories WHERE name = $1 AND company_id = $2', [row.category, companyId]);
+    if (category) {
+        const catRows = await (0, database_1.query)('SELECT id FROM inventory_categories WHERE name = $1 AND company_id = $2', [category, companyId]);
         if (catRows.length > 0) {
             categoryId = catRows[0].id;
         }
     }
-    const existing = await (0, database_1.query)('SELECT id FROM inventory_items WHERE sku = $1 AND company_id = $2', [row.sku, companyId]);
+    const existing = await (0, database_1.query)('SELECT id FROM inventory_items WHERE sku = $1 AND company_id = $2', [sku, companyId]);
     if (existing.length > 0) {
         await (0, database_1.query)(`UPDATE inventory_items SET 
         name = $1, description = $2, category_id = $3, unit_of_measure = $4,
         unit_price = $5, reorder_level = $6, reorder_quantity = $7,
         supplier_name = $8, supplier_contact = $9, location = $10, updated_at = NOW()
-       WHERE id = $11`, [row.name, row.description, categoryId, row.unit_of_measure,
-            row.unit_price, row.reorder_level, row.reorder_quantity,
-            row.supplier_name, row.supplier_contact, row.location, existing[0].id]);
+       WHERE id = $11`, [name, description, categoryId, unitOfMeasure,
+            unitPrice ? parseFloat(unitPrice) : 0,
+            reorderLevel ? parseInt(reorderLevel) : 0,
+            reorderQuantity ? parseInt(reorderQuantity) : 0,
+            supplierName, supplierContact, location, existing[0].id]);
     }
     else {
         await (0, database_1.query)(`INSERT INTO inventory_items (company_id, sku, name, description, category_id,
        unit_of_measure, unit_price, current_stock, reorder_level, reorder_quantity,
        supplier_name, supplier_contact, location, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, [companyId, row.sku, row.name, row.description, categoryId,
-            row.unit_of_measure, row.unit_price || 0, row.current_stock || 0,
-            row.reorder_level || 0, row.reorder_quantity || 0,
-            row.supplier_name, row.supplier_contact, row.location, userId]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, [companyId, sku, name, description, categoryId,
+            unitOfMeasure, unitPrice ? parseFloat(unitPrice) : 0,
+            currentStock ? parseInt(currentStock) : 0,
+            reorderLevel ? parseInt(reorderLevel) : 0,
+            reorderQuantity ? parseInt(reorderQuantity) : 0,
+            supplierName, supplierContact, location, userId]);
     }
 }
 async function importMaintenanceRecord(companyId, row) {
+    const vehicleReg = getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    const serviceType = getValue(row, ['service_type', 'type', 'maintenance_type']) || 'preventive';
+    const category = getValue(row, ['category', 'maintenance_category']);
+    const title = getValue(row, ['title', 'service_title', 'job_title']);
+    const description = getValue(row, ['description', 'desc', 'details']);
+    const providerName = getValue(row, ['provider_name', 'provider', 'vendor', 'garage', 'workshop']);
+    const scheduledDate = getValue(row, ['scheduled_date', 'schedule_date', 'planned_date']);
+    const completedDate = getValue(row, ['completed_date', 'completion_date', 'done_date']);
+    const serviceMileage = getValue(row, ['service_mileage', 'mileage', 'odometer', 'km']);
+    const nextServiceMileage = getValue(row, ['next_service_mileage', 'next_mileage']);
+    const laborCost = getValue(row, ['labor_cost', 'labour_cost', 'labor']);
+    const partsCost = getValue(row, ['parts_cost', 'parts']);
+    const otherCost = getValue(row, ['other_cost', 'other']);
+    const status = getValue(row, ['status', 'state']) || 'completed';
+    const technicianName = getValue(row, ['technician_name', 'technician', 'mechanic']);
+    const warrantyMonths = getValue(row, ['warranty_months', 'warranty']);
+    const invoiceNumber = getValue(row, ['invoice_number', 'invoice', 'receipt_no']);
+    const notes = getValue(row, ['notes', 'comments', 'remarks']);
     // Look up vehicle by registration number
-    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.vehicle_registration, companyId]);
+    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [vehicleReg, companyId]);
     if (vehicleRows.length === 0) {
-        throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+        throw new Error(`Vehicle with registration "${vehicleReg}" not found`);
     }
     const vehicleId = vehicleRows[0].id;
     // Calculate warranty expiry if provided
     let warrantyExpiry = null;
-    if (row.warranty_months && row.completed_date) {
-        warrantyExpiry = new Date(row.completed_date);
-        warrantyExpiry.setMonth(warrantyExpiry.getMonth() + parseInt(row.warranty_months));
+    if (warrantyMonths && completedDate) {
+        warrantyExpiry = new Date(completedDate);
+        warrantyExpiry.setMonth(warrantyExpiry.getMonth() + parseInt(warrantyMonths));
     }
     // Look up provider by name if provided
     let providerId = null;
-    if (row.provider_name) {
-        const providerRows = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [row.provider_name, companyId]);
+    if (providerName) {
+        const providerRows = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [providerName, companyId]);
         if (providerRows.length > 0) {
             providerId = providerRows[0].id;
         }
@@ -478,93 +558,110 @@ async function importMaintenanceRecord(companyId, row) {
     RETURNING id`, [
         companyId,
         vehicleId,
-        row.service_type?.toLowerCase() || 'preventive',
-        row.category,
-        row.title,
-        row.description || null,
+        serviceType.toLowerCase(),
+        category,
+        title,
+        description || null,
         providerId,
-        row.provider_name || null,
-        row.scheduled_date || null,
-        row.completed_date || null,
-        row.service_mileage ? parseFloat(row.service_mileage) : null,
-        row.next_service_mileage ? parseFloat(row.next_service_mileage) : null,
-        row.labor_cost ? parseFloat(row.labor_cost) : 0,
-        row.parts_cost ? parseFloat(row.parts_cost) : 0,
-        row.other_cost ? parseFloat(row.other_cost) : 0,
-        row.status?.toLowerCase() || 'completed',
-        row.technician_name || null,
-        row.warranty_months ? parseInt(row.warranty_months) : null,
+        providerName || null,
+        scheduledDate || null,
+        completedDate || null,
+        serviceMileage ? parseFloat(serviceMileage) : null,
+        nextServiceMileage ? parseFloat(nextServiceMileage) : null,
+        laborCost ? parseFloat(laborCost) : 0,
+        partsCost ? parseFloat(partsCost) : 0,
+        otherCost ? parseFloat(otherCost) : 0,
+        status.toLowerCase() || 'completed',
+        technicianName || null,
+        warrantyMonths ? parseInt(warrantyMonths) : null,
         warrantyExpiry,
-        row.invoice_number || null,
-        row.notes || null,
+        invoiceNumber || null,
+        notes || null,
     ]);
     // If completed, update vehicle mileage
-    if (row.completed_date && row.service_mileage) {
-        await (0, database_1.query)('UPDATE vehicles SET current_mileage = $1, last_service_date = $2, updated_at = NOW() WHERE id = $3', [parseFloat(row.service_mileage), row.completed_date, vehicleId]);
+    if (completedDate && serviceMileage) {
+        await (0, database_1.query)('UPDATE vehicles SET current_mileage = $1, last_service_date = $2, updated_at = NOW() WHERE id = $3', [parseFloat(serviceMileage), completedDate, vehicleId]);
     }
 }
 async function importFuelRecord(companyId, row) {
+    const vehicleReg = getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    const date = getValue(row, ['date', 'fuel_date', 'transaction_date']);
+    const liters = getValue(row, ['liters', 'quantity', 'qty', 'volume']);
+    const cost = getValue(row, ['cost', 'amount', 'total', 'price']);
+    const odometerVal = getValue(row, ['odometer', 'mileage', 'km']);
+    const fuelStation = getValue(row, ['fuel_station', 'station', 'vendor', 'supplier']);
+    const notes = getValue(row, ['notes', 'comments', 'remarks']);
     // Look up vehicle by registration number
-    const vehicleRows = await (0, database_1.query)('SELECT id, current_mileage FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.vehicle_registration, companyId]);
+    const vehicleRows = await (0, database_1.query)('SELECT id, current_mileage FROM vehicles WHERE registration_number = $1 AND company_id = $2', [vehicleReg, companyId]);
     if (vehicleRows.length === 0) {
-        throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+        throw new Error(`Vehicle with registration "${vehicleReg}" not found`);
     }
     const vehicleId = vehicleRows[0].id;
-    const odometer = row.odometer ? parseFloat(row.odometer) : vehicleRows[0].current_mileage;
+    const odometer = odometerVal ? parseFloat(odometerVal) : vehicleRows[0].current_mileage;
     await (0, database_1.query)(`INSERT INTO fuel_records (company_id, vehicle_id, date, liters, cost, odometer, fuel_station, notes)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [
         companyId,
         vehicleId,
-        row.date,
-        parseFloat(row.liters),
-        parseFloat(row.cost),
+        date,
+        liters ? parseFloat(liters) : 0,
+        cost ? parseFloat(cost) : 0,
         odometer,
-        row.fuel_station || null,
-        row.notes || null
+        fuelStation || null,
+        notes || null
     ]);
     // Update vehicle mileage if odometer provided
-    if (row.odometer) {
-        await (0, database_1.query)('UPDATE vehicles SET current_mileage = $1, updated_at = NOW() WHERE id = $2', [parseFloat(row.odometer), vehicleId]);
+    if (odometerVal) {
+        await (0, database_1.query)('UPDATE vehicles SET current_mileage = $1, updated_at = NOW() WHERE id = $2', [parseFloat(odometerVal), vehicleId]);
     }
 }
 async function importRoute(companyId, row) {
+    const vehicleReg = getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    const routeDate = getValue(row, ['route_date', 'date', 'trip_date']);
+    const routeName = getValue(row, ['route_name', 'route', 'trip', 'destination']);
+    const driver1Name = getValue(row, ['driver1_name', 'driver1', 'driver', 'primary_driver']);
+    const driver2Name = getValue(row, ['driver2_name', 'driver2', 'secondary_driver']);
+    const targetKm = getValue(row, ['target_km', 'expected_km', 'planned_km']);
+    const actualKmVal = getValue(row, ['actual_km', 'km', 'distance']);
+    const targetFuelConsumption = getValue(row, ['target_fuel_consumption', 'expected_fuel', 'fuel_target']);
+    const actualFuelVal = getValue(row, ['actual_fuel', 'fuel_used', 'fuel_consumed']);
+    const comments = getValue(row, ['comments', 'notes', 'remarks']);
     // Look up vehicle
-    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.vehicle_registration, companyId]);
+    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [vehicleReg, companyId]);
     if (vehicleRows.length === 0) {
-        throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+        throw new Error(`Vehicle with registration "${vehicleReg}" not found`);
     }
     const vehicleId = vehicleRows[0].id;
     // Look up drivers by name if provided
     let driver1Id = null;
     let driver2Id = null;
-    if (row.driver1_name) {
-        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2 AND role = 'Driver'`, [row.driver1_name, companyId]);
+    if (driver1Name) {
+        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2 AND role = 'Driver'`, [driver1Name, companyId]);
         if (driverRows.length > 0)
             driver1Id = driverRows[0].id;
     }
-    if (row.driver2_name) {
-        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2 AND role = 'Driver'`, [row.driver2_name, companyId]);
+    if (driver2Name) {
+        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2 AND role = 'Driver'`, [driver2Name, companyId]);
         if (driverRows.length > 0)
             driver2Id = driverRows[0].id;
     }
-    const actualKm = row.actual_km ? parseFloat(row.actual_km) : 0;
-    const actualFuel = row.actual_fuel ? parseFloat(row.actual_fuel) : 0;
+    const actualKm = actualKmVal ? parseFloat(actualKmVal) : 0;
+    const actualFuel = actualFuelVal ? parseFloat(actualFuelVal) : 0;
     const consumptionRate = actualFuel > 0 ? parseFloat((actualKm / actualFuel).toFixed(2)) : 0;
     await (0, database_1.query)(`INSERT INTO routes (company_id, vehicle_id, route_date, route_name, driver1_id, driver2_id,
      target_km, actual_km, target_fuel_consumption, actual_fuel, actual_consumption_rate, comments)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [
         companyId,
         vehicleId,
-        row.route_date,
-        row.route_name,
+        routeDate,
+        routeName,
         driver1Id,
         driver2Id,
-        row.target_km ? parseFloat(row.target_km) : 0,
+        targetKm ? parseFloat(targetKm) : 0,
         actualKm,
-        row.target_fuel_consumption ? parseFloat(row.target_fuel_consumption) : 0,
+        targetFuelConsumption ? parseFloat(targetFuelConsumption) : 0,
         actualFuel,
         consumptionRate,
-        row.comments || null
+        comments || null
     ]);
     // Update vehicle mileage
     if (actualKm > 0) {
@@ -572,16 +669,25 @@ async function importRoute(companyId, row) {
     }
 }
 async function importAccident(companyId, row) {
+    const vehicleReg = getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'reg_number', 'plate']);
+    const accidentDate = getValue(row, ['accident_date', 'date', 'incident_date']);
+    const location = getValue(row, ['location', 'place', 'gps_location']);
+    const description = getValue(row, ['description', 'details', 'incident_description']);
+    const severity = getValue(row, ['severity', 'severity_level']) || 'minor';
+    const damageCost = getValue(row, ['damage_cost', 'cost', 'damage_amount']);
+    const insuranceClaimNumber = getValue(row, ['insurance_claim_number', 'claim_number', 'claim_no']);
+    const driverName = getValue(row, ['driver_name', 'driver']);
+    const status = getValue(row, ['status', 'state']) || 'reported';
     // Look up vehicle
-    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.vehicle_registration, companyId]);
+    const vehicleRows = await (0, database_1.query)('SELECT id FROM vehicles WHERE registration_number = $1 AND company_id = $2', [vehicleReg, companyId]);
     if (vehicleRows.length === 0) {
-        throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+        throw new Error(`Vehicle with registration "${vehicleReg}" not found`);
     }
     const vehicleId = vehicleRows[0].id;
     // Look up driver if provided
     let driverId = null;
-    if (row.driver_name) {
-        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2`, [row.driver_name, companyId]);
+    if (driverName) {
+        const driverRows = await (0, database_1.query)(`SELECT id FROM staff WHERE staff_name = $1 AND company_id = $2`, [driverName, companyId]);
         if (driverRows.length > 0)
             driverId = driverRows[0].id;
     }
@@ -590,101 +696,140 @@ async function importAccident(companyId, row) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [
         companyId,
         vehicleId,
-        row.accident_date,
-        row.location,
-        row.description,
-        row.severity || 'minor',
-        row.damage_cost ? parseFloat(row.damage_cost) : 0,
-        row.insurance_claim_number || null,
+        accidentDate,
+        location,
+        description,
+        severity,
+        damageCost ? parseFloat(damageCost) : 0,
+        insuranceClaimNumber || null,
         driverId,
-        row.status || 'reported'
+        status
     ]);
 }
 async function importStaff(companyId, row) {
-    const existing = await (0, database_1.query)('SELECT id FROM staff WHERE staff_no = $1 AND company_id = $2', [row.staff_no, companyId]);
+    const staffNo = getValue(row, ['staff_no', 'staff_number', 'employee_id', 'emp_id', 'id']);
+    const staffName = getValue(row, ['staff_name', 'name', 'employee_name', 'full_name']);
+    const email = getValue(row, ['email', 'email_address']);
+    const phone = getValue(row, ['phone', 'mobile', 'telephone', 'contact']);
+    const designation = getValue(row, ['designation', 'position', 'title', 'job_title']);
+    const department = getValue(row, ['department', 'dept', 'division']);
+    const branch = getValue(row, ['branch', 'location', 'office']);
+    const role = getValue(row, ['role', 'job_role', 'type']) || 'Staff';
+    const comments = getValue(row, ['comments', 'notes', 'remarks']);
+    const existing = await (0, database_1.query)('SELECT id FROM staff WHERE staff_no = $1 AND company_id = $2', [staffNo, companyId]);
     if (existing.length > 0) {
         await (0, database_1.query)(`UPDATE staff SET 
         staff_name = $1, email = $2, phone = $3, designation = $4,
         department = $5, branch = $6, role = $7, comments = $8, updated_at = NOW()
-       WHERE id = $9`, [row.staff_name, row.email || null, row.phone || null, row.designation || null,
-            row.department || null, row.branch || null, row.role || 'Staff', row.comments || null, existing[0].id]);
+       WHERE id = $9`, [staffName, email || null, phone || null, designation || null,
+            department || null, branch || null, role, comments || null, existing[0].id]);
     }
     else {
         await (0, database_1.query)(`INSERT INTO staff (company_id, staff_no, staff_name, email, phone, designation,
        department, branch, role, comments)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [companyId, row.staff_no, row.staff_name, row.email || null, row.phone || null,
-            row.designation || null, row.department || null, row.branch || null,
-            row.role || 'Staff', row.comments || null]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, [companyId, staffNo, staffName, email || null, phone || null,
+            designation || null, department || null, branch || null,
+            role, comments || null]);
     }
 }
 async function importServiceProvider(companyId, row) {
-    const existing = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [row.name, companyId]);
-    const specialties = row.specialties ? row.specialties.split(';').map((s) => s.trim()) : [];
+    const name = getValue(row, ['name', 'provider_name', 'company_name', 'vendor_name']);
+    const type = getValue(row, ['type', 'provider_type', 'category']) || 'general';
+    const contactPerson = getValue(row, ['contact_person', 'contact', 'representative']);
+    const phone = getValue(row, ['phone', 'mobile', 'telephone', 'contact_number']);
+    const email = getValue(row, ['email', 'email_address']);
+    const address = getValue(row, ['address', 'street', 'location']);
+    const city = getValue(row, ['city', 'town']);
+    const country = getValue(row, ['country', 'nation']) || 'China';
+    const taxId = getValue(row, ['tax_id', 'tax_number', 'vat_id']);
+    const specialtiesVal = getValue(row, ['specialties', 'specializations', 'services']);
+    const notes = getValue(row, ['notes', 'comments', 'remarks']);
+    const existing = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [name, companyId]);
+    const specialties = specialtiesVal ? specialtiesVal.split(';').map((s) => s.trim()) : [];
     if (existing.length > 0) {
         await (0, database_1.query)(`UPDATE service_providers SET 
         type = $1, contact_person = $2, phone = $3, email = $4,
         address = $5, city = $6, country = $7, tax_id = $8,
         specialties = $9, notes = $10, updated_at = NOW()
-       WHERE id = $11`, [row.type || 'general', row.contact_person || null, row.phone || null, row.email || null,
-            row.address || null, row.city || null, row.country || 'China', row.tax_id || null,
-            specialties, row.notes || null, existing[0].id]);
+       WHERE id = $11`, [type, contactPerson || null, phone || null, email || null,
+            address || null, city || null, country, taxId || null,
+            specialties, notes || null, existing[0].id]);
     }
     else {
         await (0, database_1.query)(`INSERT INTO service_providers (company_id, name, type, contact_person, phone, email,
        address, city, country, tax_id, specialties, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [companyId, row.name, row.type || 'general', row.contact_person || null, row.phone || null,
-            row.email || null, row.address || null, row.city || null, row.country || 'China',
-            row.tax_id || null, specialties, row.notes || null]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`, [companyId, name, type, contactPerson || null, phone || null,
+            email || null, address || null, city || null, country,
+            taxId || null, specialties, notes || null]);
     }
 }
 async function importSparePart(companyId, row) {
+    const partNumber = getValue(row, ['part_number', 'part_no', 'sku', 'code']);
+    const name = getValue(row, ['name', 'part_name', 'item_name']);
+    const description = getValue(row, ['description', 'desc', 'details']);
+    const category = getValue(row, ['category', 'part_category']);
+    const manufacturer = getValue(row, ['manufacturer', 'brand', 'maker']);
+    const unitCost = getValue(row, ['unit_cost', 'cost', 'price', 'unit_price']);
+    const quantityInStock = getValue(row, ['quantity_in_stock', 'quantity', 'qty', 'stock']);
+    const reorderLevel = getValue(row, ['reorder_level', 'reorder_point', 'min_stock']);
+    const unitOfMeasure = getValue(row, ['unit_of_measure', 'uom', 'unit']) || 'piece';
+    const supplierName = getValue(row, ['supplier_name', 'supplier', 'vendor']);
     // Look up supplier if provided
     let supplierId = null;
-    if (row.supplier_name) {
-        const supplierRows = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [row.supplier_name, companyId]);
+    if (supplierName) {
+        const supplierRows = await (0, database_1.query)('SELECT id FROM service_providers WHERE name = $1 AND company_id = $2', [supplierName, companyId]);
         if (supplierRows.length > 0)
             supplierId = supplierRows[0].id;
     }
-    const existing = await (0, database_1.query)('SELECT id FROM spare_parts WHERE part_number = $1 AND company_id = $2', [row.part_number, companyId]);
+    const existing = await (0, database_1.query)('SELECT id FROM spare_parts WHERE part_number = $1 AND company_id = $2', [partNumber, companyId]);
     if (existing.length > 0) {
         await (0, database_1.query)(`UPDATE spare_parts SET 
         name = $1, description = $2, category = $3, manufacturer = $4,
         unit_cost = $5, quantity_in_stock = $6, reorder_level = $7,
         unit_of_measure = $8, supplier_id = $9, updated_at = NOW()
-       WHERE id = $10`, [row.name, row.description || null, row.category, row.manufacturer || null,
-            row.unit_cost ? parseFloat(row.unit_cost) : 0,
-            row.quantity_in_stock ? parseInt(row.quantity_in_stock) : 0,
-            row.reorder_level ? parseInt(row.reorder_level) : 10,
-            row.unit_of_measure || 'piece', supplierId, existing[0].id]);
+       WHERE id = $10`, [name, description || null, category, manufacturer || null,
+            unitCost ? parseFloat(unitCost) : 0,
+            quantityInStock ? parseInt(quantityInStock) : 0,
+            reorderLevel ? parseInt(reorderLevel) : 10,
+            unitOfMeasure, supplierId, existing[0].id]);
     }
     else {
         await (0, database_1.query)(`INSERT INTO spare_parts (company_id, part_number, name, description, category,
        manufacturer, unit_cost, quantity_in_stock, reorder_level, unit_of_measure, supplier_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [companyId, row.part_number, row.name, row.description || null, row.category,
-            row.manufacturer || null, row.unit_cost ? parseFloat(row.unit_cost) : 0,
-            row.quantity_in_stock ? parseInt(row.quantity_in_stock) : 0,
-            row.reorder_level ? parseInt(row.reorder_level) : 10,
-            row.unit_of_measure || 'piece', supplierId]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, [companyId, partNumber, name, description || null, category,
+            manufacturer || null, unitCost ? parseFloat(unitCost) : 0,
+            quantityInStock ? parseInt(quantityInStock) : 0,
+            reorderLevel ? parseInt(reorderLevel) : 10,
+            unitOfMeasure, supplierId]);
     }
 }
 async function importMaintenanceSchedule(companyId, row) {
+    const vehicleReg = getValue(row, ['vehicle_registration', 'registration', 'vehicle_reg', 'plate']);
+    const scheduleType = getValue(row, ['schedule_type', 'type']) || 'mileage_based';
+    const serviceType = getValue(row, ['service_type', 'maintenance_type']);
+    const serviceName = getValue(row, ['service_name', 'name', 'title']);
+    const description = getValue(row, ['description', 'desc']);
+    const intervalMileage = getValue(row, ['interval_mileage', 'mileage_interval']);
+    const intervalMonths = getValue(row, ['interval_months', 'months_interval']);
+    const estimatedCost = getValue(row, ['estimated_cost', 'cost', 'estimated_price']);
+    const priority = getValue(row, ['priority', 'urgency']) || 'medium';
     // Look up vehicle
-    const vehicleRows = await (0, database_1.query)('SELECT id, current_mileage FROM vehicles WHERE registration_number = $1 AND company_id = $2', [row.vehicle_registration, companyId]);
+    const vehicleRows = await (0, database_1.query)('SELECT id, current_mileage FROM vehicles WHERE registration_number = $1 AND company_id = $2', [vehicleReg, companyId]);
     if (vehicleRows.length === 0) {
-        throw new Error(`Vehicle with registration "${row.vehicle_registration}" not found`);
+        throw new Error(`Vehicle with registration "${vehicleReg}" not found`);
     }
     const vehicleId = vehicleRows[0].id;
     const currentMileage = vehicleRows[0].current_mileage || 0;
     // Calculate next service date and mileage
     let nextServiceDate = null;
     let nextServiceMileage = null;
-    if (row.interval_months) {
+    if (intervalMonths) {
         const date = new Date();
-        date.setMonth(date.getMonth() + parseInt(row.interval_months));
+        date.setMonth(date.getMonth() + parseInt(intervalMonths));
         nextServiceDate = date;
     }
-    if (row.interval_mileage) {
-        nextServiceMileage = currentMileage + parseInt(row.interval_mileage);
+    if (intervalMileage) {
+        nextServiceMileage = currentMileage + parseInt(intervalMileage);
     }
     await (0, database_1.query)(`INSERT INTO maintenance_schedules (company_id, vehicle_id, schedule_type, service_type,
      service_name, description, interval_mileage, last_service_mileage, next_service_km,
@@ -692,17 +837,17 @@ async function importMaintenanceSchedule(companyId, row) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`, [
         companyId,
         vehicleId,
-        row.schedule_type?.toLowerCase() || 'mileage_based',
-        row.service_type,
-        row.title,
-        row.description || null,
-        row.interval_mileage ? parseInt(row.interval_mileage) : null,
+        scheduleType,
+        serviceType,
+        serviceName,
+        description || null,
+        intervalMileage ? parseInt(intervalMileage) : null,
         currentMileage,
         nextServiceMileage,
-        row.interval_months ? parseInt(row.interval_months) : null,
+        intervalMonths ? parseInt(intervalMonths) : null,
         nextServiceDate,
-        row.estimated_cost ? parseFloat(row.estimated_cost) : null,
-        row.priority || 'normal'
+        estimatedCost ? parseFloat(estimatedCost) : null,
+        priority
     ]);
 }
 async function processExportJob(jobId, companyId, exportType, format, filters) {
