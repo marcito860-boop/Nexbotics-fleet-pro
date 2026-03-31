@@ -906,7 +906,7 @@ export class MaintenanceScheduleModel {
         interval_months, last_service_date, next_service_date,
         estimated_cost, estimated_duration_hours, assigned_provider_id,
         reminder_days_before, reminder_mileage_before, priority
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         companyId,
